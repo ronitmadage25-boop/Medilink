@@ -45,7 +45,18 @@ app.use(helmet({
 
 // CORS Configuration
 app.use(cors({
-  origin: [config.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: (requestOrigin, callback) => {
+    if (!requestOrigin) return callback(null, true);
+    if (
+      requestOrigin === config.clientUrl ||
+      requestOrigin === 'http://localhost:5173' ||
+      requestOrigin === 'http://127.0.0.1:5173' ||
+      requestOrigin.endsWith('.vercel.app')
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
