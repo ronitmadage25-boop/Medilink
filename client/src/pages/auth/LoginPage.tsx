@@ -130,10 +130,15 @@ export const LoginPage: React.FC = () => {
 
           {/* Quick Demo Logins */}
           <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="flex items-center gap-1.5 mb-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
-              <span>Instant Demo Logins</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
+                <span>Instant Demo Logins (1-Click)</span>
+              </div>
             </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Click any demo profile to sign in instantly with verified credentials:
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"

@@ -43,8 +43,11 @@ api.interceptors.response.use(
 export const getErrorMessage = (error: unknown): string => {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
+    if (typeof data === 'string' && data.length > 0) return data;
     if (data?.message) return data.message;
     if (Array.isArray(data?.errors) && data.errors.length > 0) return data.errors.join(', ');
+    if (error.response?.statusText) return `Server Error (${error.response.status}): ${error.response.statusText}`;
+    return error.message;
   }
   if (error instanceof Error) return error.message;
   return 'An unexpected error occurred. Please try again.';
