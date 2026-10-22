@@ -1,29 +1,33 @@
-import { Router } from 'express';
-import { authenticate, requireRole } from '../middleware/auth';
-import { AuditLog } from '../models/AuditLog';
-import { AuthRequest } from '../middleware/auth';
-import { Response } from 'express';
+import { Router, Response } from 'express';
+import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { prisma } from '../config/prisma';
 
 const router = Router();
 
 router.get('/', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
-  const { page = '1', limit = '20' } = req.query as Record<string, string>;
+  const { page = '1', limit = '50' } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, parseInt(limit, 10));
 
   const [logs, total] = await Promise.all([
-    AuditLog.find()
-      .populate('actor', 'name email role')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    AuditLog.countDocuments(),
+    prisma.auditLog.findMany({
+      include: { actor: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { createdAt: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
+    }),
+    prisma.auditLog.count(),
   ]);
+
+  const formatted = logs.map((l) => ({
+    ...l,
+    _id: l.id,
+    actor: l.actor ? { ...l.actor, _id: l.actor.id } : null,
+  }));
 
   res.json({
     success: true,
-    data: { logs, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+    data: { logs: formatted, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
   });
 });
 

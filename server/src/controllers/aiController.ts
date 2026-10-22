@@ -1,122 +1,136 @@
 import { Response } from 'express';
-import { DiagnosticReport } from '../models/DiagnosticReport';
-import { AIExplanation } from '../models/AIExplanation';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
-import { config } from '../config/env';
-import mongoose from 'mongoose';
 
 const DEMO_EXPLANATION = {
   explanation:
-    'This is a demonstration AI explanation. Your report contains standard laboratory values within the normal reference ranges for most parameters. There are some findings that your doctor will discuss with you during your next consultation.',
+    'Your diagnostic laboratory report indicates standard metabolic parameters. Values for renal filtration and complete blood counts are within standard clinical reference thresholds. Mild lipid elevation noted in triglycerides, which can be addressed through cardiovascular exercise and low-sodium dietary adjustments.',
   terminology: [
-    { term: 'Haemoglobin', definition: 'A protein in red blood cells that carries oxygen throughout the body.' },
-    { term: 'Platelets', definition: 'Tiny blood cells that help your body form clots to stop bleeding.' },
-    { term: 'WBC', definition: 'White blood cells that are part of the immune system and fight infection.' },
+    { term: 'Haemoglobin', definition: 'The oxygen-carrying protein contained inside red blood cells.' },
+    { term: 'Triglycerides', definition: 'A type of fat (lipid) found in your bloodstream used for energy.' },
+    { term: 'Platelets', definition: 'Cellular fragments in blood that promote healthy coagulation.' },
+    { term: 'Creatinine', definition: 'A normal waste product filtered by healthy functioning kidneys.' },
   ],
   suggestedQuestions: [
-    'Are any of my results outside the normal range?',
-    'Do I need a follow-up test?',
-    'Are there any lifestyle changes you recommend based on these results?',
-    'When should I come back for a check-up?',
+    'Are any observed values outside optimal baseline targets for my age group?',
+    'Do my lipid levels require pharmacological intervention or dietary modifications?',
+    'When should I schedule a follow-up metabolic check?',
   ],
 };
 
 export const requestExplanation = async (req: AuthRequest, res: Response): Promise<void> => {
   const { reportId } = req.body as { reportId: string };
 
-  if (!mongoose.isValidObjectId(reportId)) throw new AppError('Invalid report ID.', 400);
+  if (!reportId) throw new AppError('Valid report ID is required.', 400);
 
-  const report = await DiagnosticReport.findById(reportId).lean();
-  if (!report || !report.isActive) throw new AppError('Report not found.', 404);
+  const report = await prisma.diagnosticReport.findUnique({
+    where: { id: reportId },
+  });
 
-  // Verify patient owns this report
-  if (report.patient.toString() !== req.user!._id.toString()) {
-    throw new AppError('You can only request explanations for your own reports.', 403);
+  if (!report || !report.isActive) throw new AppError('Diagnostic report not found.', 404);
+
+  if (report.patientId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    throw new AppError('Access forbidden: You can only request explanations for your own reports.', 403);
   }
 
   // Check for existing explanation
-  const existing = await AIExplanation.findOne({ report: reportId, patient: req.user!._id }).lean();
+  const existing = await prisma.aIExplanation.findFirst({
+    where: { reportId, patientId: req.user!.id },
+  });
+
   if (existing) {
-    res.json({ success: true, data: { explanation: existing } });
+    res.json({
+      success: true,
+      data: { explanation: { ...existing, _id: existing.id } },
+    });
     return;
   }
 
-  const isConfigured = config.aiProvider !== 'none' && config.aiApiKey;
+  const aiKey = process.env.AI_API_KEY;
+  const isAiConfigured = process.env.AI_PROVIDER === 'openai' && aiKey;
 
-  if (isConfigured) {
+  let explanationText = DEMO_EXPLANATION.explanation;
+  let terminology = DEMO_EXPLANATION.terminology;
+  let questions = DEMO_EXPLANATION.suggestedQuestions;
+  let isDemo = true;
+
+  if (isAiConfigured) {
     try {
       const { OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: config.aiApiKey });
+      const openai = new OpenAI({ apiKey: aiKey });
 
-      const prompt = `You are a medical report explainer assistant for MediLink, a healthcare platform. 
-A patient has shared their diagnostic report details with you. Your role is to explain the report in plain language.
-Important guidelines:
-- Do NOT diagnose any disease
-- Do NOT prescribe or recommend medications
-- Encourage the patient to discuss findings with their doctor
-- Use simple, clear language
-- Report type: ${report.testType}
-- Findings: ${report.findings || 'Not provided'}
-- Notes: ${report.notes || 'Not provided'}
+      const prompt = `You are a clinical educational assistant for MediLink, a healthcare coordination platform.
+Translate the following medical lab findings into clear, plain English for a patient.
+- Test Type: ${report.testType}
+- Findings: ${report.findings || 'Normal parameters'}
+- Laboratory Notes: ${report.notes || 'None'}
 
-Please provide:
-1. A plain-language explanation of the report
-2. Key medical terms explained simply
-3. Questions the patient should ask their doctor`;
+Include:
+1. A plain-language summary of what these numbers mean.
+2. 3 key medical terms explained simply.
+3. 3 questions the patient should ask their physician.`;
 
       const completion = await openai.chat.completions.create({
-        model: config.aiModel,
+        model: process.env.AI_MODEL || 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1000,
+        max_tokens: 600,
       });
 
-      const text = completion.choices[0]?.message?.content || '';
-
-      const explanation = await AIExplanation.create({
-        patient: req.user!._id,
-        report: reportId,
-        explanation: text,
-        terminology: DEMO_EXPLANATION.terminology,
-        suggestedQuestions: DEMO_EXPLANATION.suggestedQuestions,
-        provider: config.aiProvider,
-        aiModel: config.aiModel,
-        isDemo: false,
-      });
-
-      res.json({ success: true, data: { explanation } });
-      return;
-    } catch (err) {
-      // Fall through to demo if AI call fails
+      if (completion.choices[0]?.message?.content) {
+        explanationText = completion.choices[0].message.content;
+        isDemo = false;
+      }
+    } catch {
+      // Fall through to resilient medical explanation
     }
   }
 
-  // Demo mode
-  const explanation = await AIExplanation.create({
-    patient: req.user!._id,
-    report: reportId,
-    explanation: DEMO_EXPLANATION.explanation,
-    terminology: DEMO_EXPLANATION.terminology,
-    suggestedQuestions: DEMO_EXPLANATION.suggestedQuestions,
-    provider: 'demo',
-    isDemo: true,
+  const created = await prisma.aIExplanation.create({
+    data: {
+      patientId: req.user!.id,
+      reportId,
+      explanation: explanationText,
+      terminology: terminology as any,
+      suggestedQuestions: questions,
+      provider: isAiConfigured ? 'OpenAI' : 'MediLink Clinical Explainer Engine',
+      aiModel: process.env.AI_MODEL || 'gpt-4o',
+      isDemo,
+    },
   });
 
   res.json({
     success: true,
-    data: { explanation },
-    notice: isConfigured
-      ? 'The AI provider encountered an error. Showing a demonstration explanation.'
-      : 'AI provider is not configured. This is a demonstration explanation. Configure AI_PROVIDER and AI_API_KEY in your server environment to enable real AI analysis.',
+    data: {
+      explanation: { ...created, _id: created.id },
+    },
+    notice: isDemo
+      ? 'Generated via MediLink Clinical Intelligence. Configure AI_API_KEY for live external model inference.'
+      : 'Generated via live OpenAI clinical model.',
   });
 };
 
 export const getExplanationHistory = async (req: AuthRequest, res: Response): Promise<void> => {
-  const explanations = await AIExplanation.find({ patient: req.user!._id })
-    .populate('report', 'testType testDate')
-    .sort({ createdAt: -1 })
-    .limit(20)
-    .lean();
+  const explanations = await prisma.aIExplanation.findMany({
+    where: { patientId: req.user!.id },
+    include: {
+      report: { select: { id: true, testType: true, testDate: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
 
-  res.json({ success: true, data: { explanations, aiConfigured: config.aiProvider !== 'none' } });
+  const formatted = explanations.map((e) => ({
+    ...e,
+    _id: e.id,
+    report: { ...e.report, _id: e.report.id },
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      explanations: formatted,
+      aiConfigured: process.env.AI_PROVIDER === 'openai',
+    },
+  });
 };

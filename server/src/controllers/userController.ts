@@ -1,73 +1,104 @@
 import { Request, Response } from 'express';
-import { User } from '../models/User';
-import { PatientProfile } from '../models/PatientProfile';
-import { DoctorProfile } from '../models/DoctorProfile';
-import { DiagnosticCentreProfile } from '../models/DiagnosticCentreProfile';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
 
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
-  const user = await User.findById(req.user!._id);
-  if (!user) throw new AppError('User not found.', 404);
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    include: {
+      patientProfile: true,
+      doctorProfile: true,
+      centreProfile: true,
+    },
+  });
 
-  let profile = null;
-  if (user.role === 'PATIENT') {
-    profile = await PatientProfile.findOne({ user: user._id });
-  } else if (user.role === 'DOCTOR') {
-    profile = await DoctorProfile.findOne({ user: user._id });
-  } else if (user.role === 'DIAGNOSTIC_CENTRE') {
-    profile = await DiagnosticCentreProfile.findOne({ user: user._id });
-  }
+  if (!user) throw new AppError('User account not found.', 404);
+
+  const sanitizedUser = {
+    _id: user.id,
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    mobile: user.mobile,
+    isActive: user.isActive,
+    isVerified: user.isVerified,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+    patientProfile: user.patientProfile,
+    doctorProfile: user.doctorProfile,
+    centreProfile: user.centreProfile,
+  };
 
   res.json({
     success: true,
-    data: { user, profile },
+    data: { user: sanitizedUser },
   });
 };
 
 export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-  const user = await User.findById(req.user!._id);
-  if (!user) throw new AppError('User not found.', 404);
+  const { name, mobile } = req.body;
 
-  const { name, mobile } = req.body as { name?: string; mobile?: string };
-  if (name) user.name = name;
-  if (mobile) user.mobile = mobile;
-  await user.save();
+  const updated = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: {
+      name: name || undefined,
+      mobile: mobile || undefined,
+    },
+  });
 
-  if (user.role === 'PATIENT') {
-    const { district, address, dateOfBirth, gender, bloodGroup,
-            emergencyContactName, emergencyContactPhone,
-            allergies, chronicConditions, languagePreference,
-            notificationPreferences } = req.body as Record<string, unknown>;
-    await PatientProfile.findOneAndUpdate(
-      { user: user._id },
-      {
-        $set: {
-          ...(district !== undefined && { district }),
-          ...(address !== undefined && { address }),
-          ...(dateOfBirth !== undefined && { dateOfBirth }),
-          ...(gender !== undefined && { gender }),
-          ...(bloodGroup !== undefined && { bloodGroup }),
-          ...(emergencyContactName !== undefined && { emergencyContactName }),
-          ...(emergencyContactPhone !== undefined && { emergencyContactPhone }),
-          ...(allergies !== undefined && { allergies }),
-          ...(chronicConditions !== undefined && { chronicConditions }),
-          ...(languagePreference !== undefined && { languagePreference }),
-          ...(notificationPreferences !== undefined && { notificationPreferences }),
-        },
-      },
-      { new: true, upsert: true }
-    );
-  }
-
-  res.json({ success: true, message: 'Profile updated.' });
+  res.json({
+    success: true,
+    data: { user: { ...updated, _id: updated.id } },
+    message: 'Profile updated successfully.',
+  });
 };
 
 export const getPublicDoctors = async (_req: Request, res: Response): Promise<void> => {
-  const doctors = await DoctorProfile.find({ verificationStatus: 'VERIFIED' })
-    .populate('user', 'name email mobile')
-    .select('-verificationNotes -verifiedBy')
-    .lean();
+  const doctors = await prisma.user.findMany({
+    where: { role: 'DOCTOR', isActive: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      doctorProfile: true,
+    },
+  });
 
-  res.json({ success: true, data: { doctors } });
+  const formatted = doctors.map((d) => ({
+    _id: d.id,
+    id: d.id,
+    name: d.name,
+    email: d.email,
+    mobile: d.mobile,
+    profile: d.doctorProfile,
+  }));
+
+  res.json({ success: true, data: { doctors: formatted } });
+};
+
+export const getPatients = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const patients = await prisma.user.findMany({
+    where: { role: 'PATIENT', isActive: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      patientProfile: true,
+    },
+  });
+
+  const formatted = patients.map((p) => ({
+    _id: p.id,
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    mobile: p.mobile,
+    profile: p.patientProfile,
+  }));
+
+  res.json({ success: true, data: { patients: formatted } });
 };

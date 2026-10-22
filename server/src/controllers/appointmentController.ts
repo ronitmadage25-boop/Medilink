@@ -1,58 +1,87 @@
 import { Response } from 'express';
-import { Appointment } from '../models/Appointment';
-import { Notification } from '../models/Notification';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
-import mongoose from 'mongoose';
+import { AppointmentStatus, AppointmentType } from '@prisma/client';
 
-// Check doctor availability for a slot
 async function checkConflict(
   doctorId: string,
   date: Date,
   startTime: string,
   excludeId?: string
 ): Promise<boolean> {
-  const filter: Record<string, unknown> = {
-    doctor: doctorId,
-    appointmentDate: {
-      $gte: new Date(date.toDateString()),
-      $lt: new Date(new Date(date.toDateString()).getTime() + 86400000),
-    },
-    startTime,
-    status: { $nin: ['CANCELLED', 'RESCHEDULED'] },
-  };
-  if (excludeId) filter._id = { $ne: excludeId };
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
 
-  return (await Appointment.exists(filter)) !== null;
+  const existing = await prisma.appointment.findFirst({
+    where: {
+      doctorId,
+      appointmentDate: {
+        gte: startOfDay,
+        lte: endOfDay,
+      },
+      startTime,
+      status: {
+        notIn: ['CANCELLED', 'RESCHEDULED'],
+      },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+  });
+
+  return existing !== null;
 }
 
 export const getAppointments = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '10', status, upcoming } = req.query as Record<string, string>;
+  const { page = '1', limit = '50', status, upcoming } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(50, parseInt(limit, 10));
   const role = req.user!.role;
 
-  const filter: Record<string, unknown> = {};
-  if (role === 'PATIENT') filter.patient = req.user!._id;
-  else if (role === 'DOCTOR') filter.doctor = req.user!._id;
+  const where: any = {};
+  if (role === 'PATIENT') where.patientId = req.user!.id;
+  else if (role === 'DOCTOR') where.doctorId = req.user!.id;
 
-  if (status) filter.status = status;
-  if (upcoming === 'true') filter.appointmentDate = { $gte: new Date() };
+  if (status && status !== 'ALL') where.status = status as AppointmentStatus;
+  if (upcoming === 'true') where.appointmentDate = { gte: new Date() };
 
   const [appointments, total] = await Promise.all([
-    Appointment.find(filter)
-      .populate('patient', 'name email mobile')
-      .populate('doctor', 'name email')
-      .sort({ appointmentDate: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    Appointment.countDocuments(filter),
+    prisma.appointment.findMany({
+      where,
+      include: {
+        patient: { select: { id: true, name: true, email: true, mobile: true } },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            doctorProfile: true,
+          },
+        },
+      },
+      orderBy: { appointmentDate: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
+    }),
+    prisma.appointment.count({ where }),
   ]);
+
+  // Map to frontend-friendly _id alias
+  const formatted = appointments.map((a) => ({
+    ...a,
+    _id: a.id,
+    patient: { ...a.patient, _id: a.patient.id },
+    doctor: { ...a.doctor, _id: a.doctor.id },
+  }));
 
   res.json({
     success: true,
-    data: { appointments, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+    data: {
+      appointments: formatted,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    },
   });
 };
 
@@ -67,123 +96,140 @@ export const createAppointment = async (req: AuthRequest, res: Response): Promis
   };
 
   const date = new Date(appointmentDate);
+  if (isNaN(date.getTime())) throw new AppError('Invalid appointment date provided.', 400);
 
   const conflict = await checkConflict(doctorId, date, startTime);
   if (conflict) {
-    throw new AppError('This time slot is not available. Please choose another time.', 409);
+    throw new AppError('This time slot is already booked for this physician. Please choose another slot.', 409);
   }
 
-  const appointment = await Appointment.create({
-    patient: req.user!._id,
-    doctor: doctorId,
-    appointmentDate: date,
-    startTime,
-    endTime,
-    status: 'PENDING',
-    type: type || 'IN_PERSON',
-    reason,
+  const roomCode = `room-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      patientId: req.user!.id,
+      doctorId,
+      appointmentDate: date,
+      startTime,
+      endTime,
+      type: (type as AppointmentType) || 'IN_PERSON',
+      reason,
+      status: 'PENDING',
+      roomCode,
+    },
+    include: {
+      patient: { select: { id: true, name: true, email: true } },
+      doctor: { select: { id: true, name: true, email: true } },
+    },
   });
 
-  await Notification.create({
-    recipient: doctorId,
-    type: 'APPOINTMENT_BOOKED',
-    title: 'New Appointment Request',
-    message: `${req.user!.name} has booked an appointment on ${date.toLocaleDateString()}.`,
-    link: `/appointments/${appointment._id}`,
+  // Notify Doctor
+  await prisma.notification.create({
+    data: {
+      recipientId: doctorId,
+      title: 'New Consultation Booking',
+      message: `${req.user!.name} requested a consultation on ${date.toLocaleDateString()} at ${startTime}.`,
+      type: 'APPOINTMENT',
+    },
   });
 
-  res.status(201).json({ success: true, data: { appointment } });
+  res.status(201).json({
+    success: true,
+    data: {
+      appointment: {
+        ...appointment,
+        _id: appointment.id,
+      },
+    },
+  });
 };
 
 export const updateAppointmentStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const { status, cancellationReason, notes } = req.body as {
-    status: string;
+  const id = String(req.params.id);
+  const { status, cancellationReason } = req.body as {
+    status: AppointmentStatus;
     cancellationReason?: string;
-    notes?: string;
   };
 
-  if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid appointment ID.', 400);
+  const appointment = await prisma.appointment.findUnique({
+    where: { id },
+    include: { patient: true, doctor: true },
+  });
 
-  const appointment = await Appointment.findById(id);
   if (!appointment) throw new AppError('Appointment not found.', 404);
 
-  const userId = req.user!._id.toString();
-  const isPatient = appointment.patient.toString() === userId;
-  const isDoctor = appointment.doctor.toString() === userId;
+  const userId = req.user!.id;
+  const isAuthorized =
+    appointment.patientId === userId ||
+    appointment.doctorId === userId ||
+    req.user!.role === 'ADMIN';
 
-  if (!isPatient && !isDoctor && req.user!.role !== 'ADMIN') {
-    throw new AppError('Not authorised to update this appointment.', 403);
+  if (!isAuthorized) {
+    throw new AppError('Not authorized to modify this appointment.', 403);
   }
 
-  // Business rules
-  if (status === 'CONFIRMED' && !isDoctor && req.user!.role !== 'ADMIN') {
-    throw new AppError('Only the doctor can confirm an appointment.', 403);
-  }
+  const updated = await prisma.appointment.update({
+    where: { id },
+    data: {
+      status,
+      cancellationReason: cancellationReason || appointment.cancellationReason,
+    },
+  });
 
-  appointment.status = status as typeof appointment.status;
-  if (status === 'CANCELLED') {
-    appointment.cancelledBy = req.user!._id;
-    appointment.cancellationReason = cancellationReason;
-  }
-  if (notes) appointment.notes = notes;
+  // Dispatch Notification
+  const notifyRecipient = userId === appointment.patientId ? appointment.doctorId : appointment.patientId;
+  await prisma.notification.create({
+    data: {
+      recipientId: notifyRecipient,
+      title: `Consultation Status: ${status}`,
+      message: `Your appointment on ${new Date(appointment.appointmentDate).toLocaleDateString()} is now ${status}.`,
+      type: 'APPOINTMENT',
+    },
+  });
 
-  await appointment.save();
-
-  if (status === 'CANCELLED') {
-    const notifyId = isPatient ? appointment.doctor : appointment.patient;
-    await Notification.create({
-      recipient: notifyId,
-      type: 'APPOINTMENT_CANCELLED',
-      title: 'Appointment Cancelled',
-      message: `Appointment on ${appointment.appointmentDate.toLocaleDateString()} has been cancelled.`,
-    });
-  }
-
-  res.json({ success: true, data: { appointment } });
+  res.json({
+    success: true,
+    data: {
+      appointment: { ...updated, _id: updated.id },
+    },
+  });
 };
 
 export const rescheduleAppointment = async (req: AuthRequest, res: Response): Promise<void> => {
-  const id = req.params.id as string;
-  const { newDate, newStartTime, newEndTime } = req.body as {
-    newDate: string;
-    newStartTime: string;
-    newEndTime: string;
-  };
+  const id = String(req.params.id);
+  const { newDate, newStartTime, newEndTime } = req.body;
 
-  const appointment = await Appointment.findById(id);
+  const appointment = await prisma.appointment.findUnique({ where: { id } });
   if (!appointment) throw new AppError('Appointment not found.', 404);
 
-  const userId = req.user!._id.toString();
-  if (
-    appointment.patient.toString() !== userId &&
-    appointment.doctor.toString() !== userId &&
-    req.user!.role !== 'ADMIN'
-  ) {
-    throw new AppError('Not authorised to reschedule this appointment.', 403);
-  }
-
   const date = new Date(newDate);
-  const conflict = await checkConflict(appointment.doctor.toString(), date, newStartTime, id);
+  const conflict = await checkConflict(appointment.doctorId, date, newStartTime, id);
   if (conflict) {
-    throw new AppError('This time slot is not available. Please choose another time.', 409);
+    throw new AppError('The requested reschedule slot is already booked.', 409);
   }
 
-  // Mark old as rescheduled, create new one
-  appointment.status = 'RESCHEDULED';
-  await appointment.save();
-
-  const newAppointment = await Appointment.create({
-    patient: appointment.patient,
-    doctor: appointment.doctor,
-    appointmentDate: date,
-    startTime: newStartTime,
-    endTime: newEndTime,
-    status: 'PENDING',
-    type: appointment.type,
-    reason: appointment.reason,
-    rescheduledFrom: appointment._id,
+  await prisma.appointment.update({
+    where: { id },
+    data: { status: 'RESCHEDULED' },
   });
 
-  res.json({ success: true, data: { appointment: newAppointment } });
+  const newAppt = await prisma.appointment.create({
+    data: {
+      patientId: appointment.patientId,
+      doctorId: appointment.doctorId,
+      appointmentDate: date,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      status: 'PENDING',
+      type: appointment.type,
+      reason: appointment.reason,
+      rescheduledFrom: appointment.id,
+      roomCode: `room-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    },
+  });
+
+  res.json({
+    success: true,
+    data: { appointment: { ...newAppt, _id: newAppt.id } },
+  });
 };

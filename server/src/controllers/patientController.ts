@@ -1,173 +1,123 @@
 import { Response } from 'express';
-import { DiagnosticReport } from '../models/DiagnosticReport';
-import { MedicalRecord } from '../models/MedicalRecord';
-import { Prescription } from '../models/Prescription';
-import { Appointment } from '../models/Appointment';
-import { PatientProfile } from '../models/PatientProfile';
-import { User } from '../models/User';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
 
-// GET /patients/dashboard
 export const getPatientDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
-  const patientId = req.user!._id;
+  const patientId = req.user!.id;
 
-  const [recordCount, reportCount, prescriptionCount, upcomingAppointments, recentReports, profile] =
+  const [reportCount, prescriptionCount, upcomingAppointments, recentReports, profile] =
     await Promise.all([
-      MedicalRecord.countDocuments({ patient: patientId, isActive: true }),
-      DiagnosticReport.countDocuments({ patient: patientId, isActive: true }),
-      Prescription.countDocuments({ patient: patientId, isActive: true }),
-      Appointment.find({
-        patient: patientId,
-        appointmentDate: { $gte: new Date() },
-        status: { $in: ['PENDING', 'CONFIRMED'] },
-      })
-        .populate('doctor', 'name')
-        .sort({ appointmentDate: 1 })
-        .limit(5)
-        .lean(),
-      DiagnosticReport.find({ patient: patientId, isActive: true })
-        .populate('diagnosticCentre', 'name')
-        .populate('referringDoctor', 'name')
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean(),
-      PatientProfile.findOne({ user: patientId }).lean(),
+      prisma.diagnosticReport.count({ where: { patientId, isActive: true } }),
+      prisma.prescription.count({ where: { patientId } }),
+      prisma.appointment.findMany({
+        where: {
+          patientId,
+          appointmentDate: { gte: new Date() },
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+        include: { doctor: { select: { id: true, name: true, email: true } } },
+        orderBy: { appointmentDate: 'asc' },
+        take: 5,
+      }),
+      prisma.diagnosticReport.findMany({
+        where: { patientId, isActive: true },
+        include: {
+          diagnosticCentre: { select: { id: true, name: true } },
+          referringDoctor: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      prisma.patientProfile.findUnique({ where: { userId: patientId } }),
     ]);
 
   res.json({
     success: true,
     data: {
-      stats: { recordCount, reportCount, prescriptionCount },
-      upcomingAppointments,
-      recentReports,
+      stats: { reportCount, prescriptionCount },
+      upcomingAppointments: upcomingAppointments.map((a) => ({ ...a, _id: a.id })),
+      recentReports: recentReports.map((r) => ({ ...r, _id: r.id })),
       profile,
     },
   });
 };
 
-// GET /patients/records
-export const getPatientRecords = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '10', category, search } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)));
-
-  const filter: Record<string, unknown> = { patient: req.user!._id, isActive: true };
-  if (category) filter.category = category;
-  if (search) filter.title = { $regex: search, $options: 'i' };
-
-  const [records, total] = await Promise.all([
-    MedicalRecord.find(filter)
-      .sort({ recordDate: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    MedicalRecord.countDocuments(filter),
-  ]);
-
-  res.json({
-    success: true,
-    data: { records, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+export const getDoctorPatients = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const patients = await prisma.user.findMany({
+    where: { role: 'PATIENT', isActive: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      patientProfile: true,
+    },
+    orderBy: { name: 'asc' },
   });
+
+  const formatted = patients.map((p) => ({
+    _id: p.id,
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    mobile: p.mobile,
+    profile: p.patientProfile,
+  }));
+
+  res.json({ success: true, data: { patients: formatted } });
 };
 
-// POST /patients/records
-export const createPatientRecord = async (req: AuthRequest, res: Response): Promise<void> => {
-  const record = await MedicalRecord.create({
-    ...req.body,
-    patient: req.user!._id,
-  });
-  res.status(201).json({ success: true, data: { record } });
-};
-
-// GET /patients/profile
-export const getPatientProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-  const profile = await PatientProfile.findOne({ user: req.user!._id }).lean();
-  if (!profile) throw new AppError('Profile not found.', 404);
-  res.json({ success: true, data: { profile } });
-};
-
-// PATCH /patients/profile
-export const updatePatientProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-  const profile = await PatientProfile.findOneAndUpdate(
-    { user: req.user!._id },
-    { $set: req.body },
-    { new: true, upsert: true }
-  );
-  res.json({ success: true, data: { profile } });
-};
-
-// GET /patients — for doctors to list their authorised patients
-export const getDoctorPatients = async (req: AuthRequest, res: Response): Promise<void> => {
-  const doctorId = req.user!._id;
-
-  // A patient is "authorised" to the doctor if there is at least one appointment
-  const appointmentPatients = await Appointment.find({ doctor: doctorId })
-    .distinct('patient');
-
-  const { page = '1', limit = '10', search } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)));
-
-  const userFilter: Record<string, unknown> = {
-    _id: { $in: appointmentPatients },
-    role: 'PATIENT',
-  };
-  if (search) {
-    userFilter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-    ];
-  }
-
-  const [patients, total] = await Promise.all([
-    User.find(userFilter)
-      .select('name email mobile createdAt')
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    User.countDocuments(userFilter),
-  ]);
-
-  res.json({
-    success: true,
-    data: { patients, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
-  });
-};
-
-// GET /patients/:id — for doctors to view a specific patient (must have appointment relationship)
 export const getPatientById = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const doctorId = req.user!._id;
+  const id = String(req.params.id);
 
-  if (req.user!.role !== 'ADMIN') {
-    const hasAppointment = await Appointment.exists({ doctor: doctorId, patient: id });
-    if (!hasAppointment) {
-      throw new AppError('You do not have access to this patient record.', 403);
-    }
-  }
+  const patient = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      mobile: true,
+      patientProfile: true,
+    },
+  });
 
-  const [user, profile, reports, prescriptions, appointments] = await Promise.all([
-    User.findById(id).select('name email mobile createdAt'),
-    PatientProfile.findOne({ user: id }),
-    DiagnosticReport.find({ patient: id, isActive: true })
-      .populate('diagnosticCentre', 'name')
-      .sort({ testDate: -1 })
-      .limit(10)
-      .lean(),
-    Prescription.find({ patient: id, isActive: true })
-      .populate('doctor', 'name')
-      .sort({ prescriptionDate: -1 })
-      .limit(10)
-      .lean(),
-    Appointment.find({ patient: id })
-      .populate('doctor', 'name')
-      .sort({ appointmentDate: -1 })
-      .limit(10)
-      .lean(),
-  ]);
+  if (!patient) throw new AppError('Patient not found.', 404);
 
-  if (!user || user.role !== 'PATIENT') throw new AppError('Patient not found.', 404);
+  res.json({
+    success: true,
+    data: { patient: { ...patient, _id: patient.id } },
+  });
+};
 
-  res.json({ success: true, data: { user, profile, reports, prescriptions, appointments } });
+export const getPatientProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const profile = await prisma.patientProfile.findUnique({
+    where: { userId: req.user!.id },
+  });
+  res.json({ success: true, data: { profile } });
+};
+
+export const updatePatientProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { district, address, bloodGroup, allergies, chronicConditions } = req.body;
+
+  const updated = await prisma.patientProfile.upsert({
+    where: { userId: req.user!.id },
+    update: {
+      district: district || undefined,
+      address: address || undefined,
+      bloodGroup: bloodGroup || undefined,
+      allergies: allergies || undefined,
+      chronicConditions: chronicConditions || undefined,
+    },
+    create: {
+      userId: req.user!.id,
+      district,
+      address,
+      bloodGroup,
+      allergies: allergies || [],
+      chronicConditions: chronicConditions || [],
+    },
+  });
+
+  res.json({ success: true, data: { profile: updated } });
 };

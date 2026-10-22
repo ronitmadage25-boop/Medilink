@@ -1,76 +1,78 @@
 import { Response } from 'express';
-import { SymptomCheckIn } from '../models/SymptomCheckIn';
-import { Notification } from '../models/Notification';
-import { Appointment } from '../models/Appointment';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
+import { SeverityLevel } from '@prisma/client';
 
 export const getMyCheckIns = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '10' } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(50, parseInt(limit, 10));
-
-  const [checkIns, total] = await Promise.all([
-    SymptomCheckIn.find({ patient: req.user!._id })
-      .sort({ reportedAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    SymptomCheckIn.countDocuments({ patient: req.user!._id }),
-  ]);
-
-  res.json({
-    success: true,
-    data: { checkIns, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+  const checkIns = await prisma.symptomCheckIn.findMany({
+    where: { patientId: req.user!.id },
+    orderBy: { createdAt: 'desc' },
+    take: 30,
   });
+
+  const formatted = checkIns.map((c) => ({ ...c, _id: c.id }));
+  res.json({ success: true, data: { checkIns: formatted } });
 };
 
 export const createCheckIn = async (req: AuthRequest, res: Response): Promise<void> => {
   const { symptoms, severity, notes } = req.body as {
     symptoms: string[];
-    severity: 'MILD' | 'MODERATE' | 'SEVERE';
+    severity?: SeverityLevel;
     notes?: string;
   };
 
-  const isEmergency = symptoms.some((s) =>
-    ['chest pain', 'difficulty breathing', 'severe bleeding', 'unconscious'].some((e) =>
-      s.toLowerCase().includes(e)
-    )
-  ) || severity === 'SEVERE';
+  if (!Array.isArray(symptoms) || symptoms.length === 0) {
+    throw new AppError('Please select at least one symptom.', 400);
+  }
 
-  const checkIn = await SymptomCheckIn.create({
-    patient: req.user!._id,
-    symptoms,
-    severity,
-    notes,
-    isEmergency,
+  const criticalKeywords = ['chest pain', 'shortness of breath', 'difficulty breathing', 'severe numbness'];
+  const hasCriticalSymptom = symptoms.some((s) =>
+    criticalKeywords.some((keyword) => s.toLowerCase().includes(keyword))
+  );
+
+  const isEmergency = severity === 'SEVERE' || hasCriticalSymptom;
+  let doctorAlerted = false;
+
+  // Find recent attending doctor
+  const recentAppointment = await prisma.appointment.findFirst({
+    where: {
+      patientId: req.user!.id,
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+    },
+    orderBy: { appointmentDate: 'desc' },
   });
 
-  // Alert patient's doctors
-  if (severity === 'MODERATE' || severity === 'SEVERE') {
-    const doctorIds = await Appointment.distinct('doctor', { patient: req.user!._id });
-    for (const doctorId of doctorIds) {
-      await Notification.create({
-        recipient: doctorId,
-        type: 'SYMPTOM_ALERT',
-        title: isEmergency ? '⚠️ Emergency Symptom Alert' : 'Symptom Check-in Alert',
-        message: `${req.user!.name} reported ${severity.toLowerCase()} symptoms: ${symptoms.join(', ')}.`,
-        link: `/alerts/${checkIn._id}`,
-      });
-    }
+  if (isEmergency && recentAppointment) {
+    await prisma.notification.create({
+      data: {
+        recipientId: recentAppointment.doctorId,
+        title: 'HIGH PRIORITY: Patient Emergency Symptoms Reported',
+        message: `Patient ${req.user!.name} logged high-severity symptoms (${symptoms.join(', ')}). Immediate clinical attention advised.`,
+        type: 'CHECK_IN',
+      },
+    });
+    doctorAlerted = true;
   }
+
+  const checkIn = await prisma.symptomCheckIn.create({
+    data: {
+      patientId: req.user!.id,
+      symptoms,
+      severity: severity || 'MILD',
+      notes: notes || null,
+      isEmergencyAlert: isEmergency,
+      doctorAlerted,
+    },
+  });
 
   res.status(201).json({
     success: true,
-    data: { checkIn },
-    ...(isEmergency && {
-      emergency: true,
-      emergencyMessage:
-        'Based on your reported symptoms, please seek immediate emergency medical care or call your local emergency services immediately. Do not rely on this application for emergency response.',
-    }),
+    data: {
+      checkIn: { ...checkIn, _id: checkIn.id },
+      emergencyNotice: isEmergency
+        ? 'Warning: High severity symptoms detected. If you are in immediate distress, dial emergency services (112 or local hospital) without delay.'
+        : null,
+    },
   });
-};
-
-export const getRecords = async (_req: AuthRequest, res: Response): Promise<void> => {
-  res.json({ success: true, data: { records: [] } });
 };

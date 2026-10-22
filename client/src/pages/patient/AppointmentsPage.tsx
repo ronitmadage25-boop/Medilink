@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api, getErrorMessage } from '../../lib/api';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -230,7 +231,14 @@ export const AppointmentsPage: React.FC = () => {
               </div>
 
               {(appt.status === 'PENDING' || appt.status === 'CONFIRMED') && (
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <Link
+                    to={`/consultation/${(appt as any).roomCode || appt._id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    Join Video Consultation
+                  </Link>
                   <Button
                     variant="ghost"
                     size="sm"

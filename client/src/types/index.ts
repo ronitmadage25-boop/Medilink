@@ -68,6 +68,7 @@ export interface Appointment {
   reason?: string;
   notes?: string;
   cancellationReason?: string;
+  roomCode?: string;
   createdAt: string;
 }
 
@@ -106,6 +107,18 @@ export interface DiagnosticReport {
     mimeType: string;
     fileSize: number;
     provider: string;
+  };
+  ocrRawText?: string;
+  ocrParsedData?: {
+    parameters?: Array<{
+      name: string;
+      value: string | number;
+      unit?: string;
+      referenceRange?: string;
+      isAbnormal?: boolean;
+    }>;
+    abnormalCount?: number;
+    rawCount?: number;
   };
   reviewStatus: 'PENDING_REVIEW' | 'REVIEWED';
   reviewedBy?: User;

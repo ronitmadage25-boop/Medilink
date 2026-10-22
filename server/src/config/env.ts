@@ -18,7 +18,7 @@ function optionalEnv(key: string, defaultValue = ''): string {
 export const config = {
   nodeEnv: optionalEnv('NODE_ENV', 'development'),
   port: parseInt(optionalEnv('PORT', '5000'), 10),
-  mongoUri: requireEnv('MONGODB_URI'),
+  databaseUrl: requireEnv('DATABASE_URL'),
   clientUrl: optionalEnv('CLIENT_URL', 'http://localhost:5173'),
   serverUrl: optionalEnv('SERVER_URL', 'http://localhost:5000'),
 

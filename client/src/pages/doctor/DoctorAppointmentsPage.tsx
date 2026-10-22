@@ -150,15 +150,26 @@ export const DoctorAppointmentsPage: React.FC = () => {
 
               {/* Actions Toolbar */}
               <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                  icon={<Pill className="w-3.5 h-3.5" />}
-                  onClick={() => navigate('/doctor/prescriptions', { state: { patient: appt.patient, appointmentId: appt._id } })}
-                >
-                  Write Prescription
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs text-blue-700 border-blue-300 hover:bg-blue-50"
+                    icon={<Video className="w-3.5 h-3.5" />}
+                    onClick={() => navigate(`/consultation/${(appt as any).roomCode || appt._id}`)}
+                  >
+                    Start Video Consultation
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                    icon={<Pill className="w-3.5 h-3.5" />}
+                    onClick={() => navigate('/doctor/prescriptions', { state: { patient: appt.patient, appointmentId: appt._id } })}
+                  >
+                    Write Prescription
+                  </Button>
+                </div>
 
                 <div className="flex items-center gap-2">
                   {appt.status === 'PENDING' && (

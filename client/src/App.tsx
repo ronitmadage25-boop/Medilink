@@ -30,6 +30,9 @@ import { DoctorReportsPage } from './pages/doctor/DoctorReportsPage';
 import { CentreDashboard } from './pages/centre/CentreDashboard';
 import { UploadReportPage } from './pages/centre/UploadReportPage';
 
+// WebRTC Telemedicine Consultation
+import { ConsultationRoomPage } from './pages/consultation/ConsultationRoomPage';
+
 // Admin pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
@@ -45,6 +48,16 @@ export const App: React.FC = () => {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+
+          {/* Fullscreen Encrypted WebRTC Video Consultation Room */}
+          <Route
+            path="/consultation/:roomCode"
+            element={
+              <ProtectedRoute allowedRoles={['PATIENT', 'DOCTOR', 'ADMIN']}>
+                <ConsultationRoomPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Authenticated Application Layout */}
           <Route

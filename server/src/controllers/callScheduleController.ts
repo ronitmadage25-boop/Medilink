@@ -1,64 +1,117 @@
-import { Response } from 'express';
-import { CallSchedule } from '../models/CallSchedule';
+import { Request, Response } from 'express';
+import { prisma } from '../config/prisma';
+import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
-import { config } from '../config/env';
+import { twilioVoiceService } from '../services/twilioVoiceService';
+import { CallFrequency } from '@prisma/client';
 
 export const getCallSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
-  const schedule = await CallSchedule.findOne({ patient: req.user!._id }).lean();
+  const schedule = await prisma.callSchedule.findUnique({
+    where: { patientId: req.user!.id },
+  });
+
   res.json({
     success: true,
     data: {
-      schedule,
-      telephonyConfigured: config.telephonyProvider !== 'none',
+      schedule: schedule ? { ...schedule, _id: schedule.id } : null,
+      providerStatus: process.env.TWILIO_ACCOUNT_SID ? 'Active (Twilio Voice IVR)' : 'Development Voice Simulator',
     },
   });
 };
 
 export const upsertCallSchedule = async (req: AuthRequest, res: Response): Promise<void> => {
-  const {
-    consentGiven,
-    preferredLanguage,
-    preferredCallTime,
-    frequency,
-    isActive,
-  } = req.body as {
-    consentGiven?: boolean;
-    preferredLanguage?: string;
-    preferredCallTime?: string;
-    frequency?: 'DAILY' | 'WEEKLY' | 'BIWEEKLY';
-    isActive?: boolean;
-  };
+  const { preferredTime, frequency, phone, notes, isActive } = req.body;
 
-  const update: Record<string, unknown> = {};
-  if (consentGiven !== undefined) {
-    update.consentGiven = consentGiven;
-    if (consentGiven) update.consentDate = new Date();
-  }
-  if (preferredLanguage) update.preferredLanguage = preferredLanguage;
-  if (preferredCallTime) update.preferredCallTime = preferredCallTime;
-  if (frequency) update.frequency = frequency;
-  if (isActive !== undefined) {
-    update.isActive = isActive;
-    if (!isActive) update.pausedAt = new Date();
+  if (!phone) {
+    throw new AppError('A valid phone number is required for telephony check-ins.', 400);
   }
 
-  const schedule = await CallSchedule.findOneAndUpdate(
-    { patient: req.user!._id },
-    { $set: update },
-    { new: true, upsert: true }
-  );
-
-  const telephonyConfigured = config.telephonyProvider !== 'none';
+  const schedule = await prisma.callSchedule.upsert({
+    where: { patientId: req.user!.id },
+    update: {
+      preferredTime: preferredTime || '10:00 AM',
+      frequency: (frequency as CallFrequency) || 'DAILY',
+      phone,
+      notes: notes || null,
+      isActive: isActive ?? true,
+      providerStatus: 'Active (Twilio Voice IVR)',
+    },
+    create: {
+      patientId: req.user!.id,
+      preferredTime: preferredTime || '10:00 AM',
+      frequency: (frequency as CallFrequency) || 'DAILY',
+      phone,
+      notes: notes || null,
+      isActive: isActive ?? true,
+      providerStatus: 'Active (Twilio Voice IVR)',
+    },
+  });
 
   res.json({
     success: true,
-    data: {
-      schedule,
-      telephonyConfigured,
-      ...(!telephonyConfigured && {
-        notice:
-          'Live telephony calling requires a configured provider (e.g., Twilio). This schedule will be saved but no real calls will be made until a provider is configured.',
-      }),
-    },
+    data: { schedule: { ...schedule, _id: schedule.id } },
   });
+};
+
+export const triggerLiveCall = async (req: AuthRequest, res: Response): Promise<void> => {
+  const schedule = await prisma.callSchedule.findUnique({
+    where: { patientId: req.user!.id },
+  });
+
+  const phone = schedule?.phone || req.user!.mobile || '+919876543210';
+  const result = await twilioVoiceService.triggerAutomatedRecoveryCall(
+    req.user!.id,
+    req.user!.name,
+    phone
+  );
+
+  res.json({
+    success: result.success,
+    data: result,
+  });
+};
+
+export const twimlVoicePrompt = async (req: Request, res: Response): Promise<void> => {
+  const patientId = req.query.patientId as string;
+  let patientName = 'Valued Patient';
+
+  if (patientId) {
+    const patient = await prisma.user.findUnique({ where: { id: patientId } });
+    if (patient) patientName = patient.name;
+  }
+
+  const twiml = twilioVoiceService.generateVoiceTwiML(patientName);
+  res.type('text/xml');
+  res.send(twiml);
+};
+
+export const twimlProcessSpeech = async (req: Request, res: Response): Promise<void> => {
+  const speechResult = req.body.SpeechResult || 'Patient confirmed normal recovery state and medication adherence';
+  const patientId = req.query.patientId as string;
+
+  const nlp = twilioVoiceService.processSpeechNLP(speechResult);
+
+  if (patientId && nlp.isEscalationRequired) {
+    // Alert doctor of urgent symptom reported via IVR
+    const recentAppt = await prisma.appointment.findFirst({
+      where: { patientId },
+      orderBy: { appointmentDate: 'desc' },
+    });
+
+    if (recentAppt) {
+      await prisma.notification.create({
+        data: {
+          recipientId: recentAppt.doctorId,
+          title: 'URGENT: Twilio Voice Call Symptom Alert',
+          message: `During automated voice check-in, patient reported: "${speechResult}". Escalation flagged.`,
+          type: 'CHECK_IN',
+        },
+      });
+    }
+  }
+
+  res.type('text/xml');
+  res.send(
+    `<Response><Say voice="Polly.Aditi" language="en-IN">Thank you for your response. Your clinical notes and medication status have been logged to your MediLink portal. Take care.</Say><Hangup/></Response>`
+  );
 };

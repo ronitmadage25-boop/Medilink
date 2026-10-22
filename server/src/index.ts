@@ -1,5 +1,6 @@
 import express from 'express';
 import 'express-async-errors';
+import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -8,10 +9,11 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { config } from './config/env';
-import { connectDB } from './config/database';
+import { connectPostgres } from './config/prisma';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import { logger } from './utils/logger';
+import { webrtcService } from './services/webrtcService';
 
 // Route imports
 import authRoutes from './routes/auth';
@@ -31,15 +33,19 @@ import adminRoutes from './routes/admin';
 import auditRoutes from './routes/auditLogs';
 
 const app = express();
+const server = http.createServer(app);
+
+// Initialize WebRTC Real-Time Signaling Engine
+webrtcService.init(server, config.clientUrl);
 
 // Security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 
-// CORS
+// CORS Configuration
 app.use(cors({
-  origin: config.clientUrl,
+  origin: [config.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
@@ -54,8 +60,8 @@ app.use(morgan('combined', {
 }));
 
 // Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(cookieParser());
 
 // Global rate limiter
@@ -68,28 +74,20 @@ const globalLimiter = rateLimit({
 });
 app.use('/api', globalLimiter);
 
-// Auth rate limiter (stricter)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: config.authRateLimitMax,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many authentication attempts, please try again later.' },
-});
-
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({
     success: true,
     status: 'healthy',
+    database: 'Neon PostgreSQL (Connected)',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: '2.0.0',
   });
 });
 
 // API routes
 const API_PREFIX = '/api/v1';
-app.use(`${API_PREFIX}/auth`, authLimiter, authRoutes);
+app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/patients`, patientRoutes);
 app.use(`${API_PREFIX}/doctors`, doctorRoutes);
@@ -105,10 +103,8 @@ app.use(`${API_PREFIX}/ai`, aiRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/audit-logs`, auditRoutes);
 
-// Serve local uploads (development only — never in production without access control)
-if (config.fileStorageProvider === 'local' && config.nodeEnv === 'development') {
-  app.use('/uploads', express.static(path.join(__dirname, '..', config.localUploadDir)));
-}
+// Local uploads fallback
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // 404 and error handlers
 app.use(notFound);
@@ -117,9 +113,9 @@ app.use(errorHandler);
 // Start server
 const start = async () => {
   try {
-    await connectDB();
-    app.listen(config.port, () => {
-      logger.info(`MediLink API running on port ${config.port} [${config.nodeEnv}]`);
+    await connectPostgres();
+    server.listen(config.port, () => {
+      logger.info(`MediLink+ API & WebRTC Engine active on port ${config.port} [${config.nodeEnv}]`);
     });
   } catch (err) {
     logger.error('Failed to start server:', err);

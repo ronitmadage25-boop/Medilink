@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Notification } from '../models/Notification';
+import { prisma } from '../config/prisma';
 import { AuthRequest } from '../middleware/auth';
 
 export const getNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -7,35 +7,45 @@ export const getNotifications = async (req: AuthRequest, res: Response): Promise
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, parseInt(limit, 10));
 
-  const filter: Record<string, unknown> = { recipient: req.user!._id };
-  if (unreadOnly === 'true') filter.isRead = false;
+  const where: any = { recipientId: req.user!.id };
+  if (unreadOnly === 'true') where.isRead = false;
 
   const [notifications, total, unreadCount] = await Promise.all([
-    Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    Notification.countDocuments(filter),
-    Notification.countDocuments({ recipient: req.user!._id, isRead: false }),
+    prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
+    }),
+    prisma.notification.count({ where }),
+    prisma.notification.count({ where: { recipientId: req.user!.id, isRead: false } }),
   ]);
+
+  const formatted = notifications.map((n) => ({ ...n, _id: n.id }));
 
   res.json({
     success: true,
-    data: { notifications, unreadCount, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+    data: {
+      notifications: formatted,
+      unreadCount,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    },
   });
 };
 
 export const markAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  await Notification.findOneAndUpdate(
-    { _id: id, recipient: req.user!._id },
-    { isRead: true }
-  );
+  const id = String(req.params.id);
+  await prisma.notification.updateMany({
+    where: { id, recipientId: req.user!.id },
+    data: { isRead: true, readAt: new Date() },
+  });
   res.json({ success: true });
 };
 
 export const markAllAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
-  await Notification.updateMany({ recipient: req.user!._id, isRead: false }, { isRead: true });
+  await prisma.notification.updateMany({
+    where: { recipientId: req.user!.id, isRead: false },
+    data: { isRead: true, readAt: new Date() },
+  });
   res.json({ success: true });
 };

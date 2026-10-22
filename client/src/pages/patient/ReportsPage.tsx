@@ -199,6 +199,44 @@ export const ReportsPage: React.FC = () => {
               </div>
             )}
 
+            {/* OCR Extracted Biomarkers Table */}
+            {selectedReport.ocrParsedData?.parameters && selectedReport.ocrParsedData.parameters.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h4 className="text-xs font-semibold uppercase text-slate-500">
+                    Automated OCR Extracted Biomarkers
+                  </h4>
+                  {selectedReport.ocrParsedData.abnormalCount ? (
+                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {selectedReport.ocrParsedData.abnormalCount} Abnormal Values
+                    </span>
+                  ) : null}
+                </div>
+                <div className="rounded-xl border border-slate-200 overflow-hidden bg-white divide-y divide-slate-100 text-xs">
+                  {selectedReport.ocrParsedData.parameters.map((param: any, idx: number) => (
+                    <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <div>
+                        <span className="font-semibold text-slate-800">{param.name}</span>
+                        <span className="block text-[10px] text-slate-400">
+                          Ref: {param.referenceRange || 'Standard Range'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-bold ${param.isAbnormal ? 'text-amber-600' : 'text-slate-800'}`}>
+                          {param.value} {param.unit}
+                        </span>
+                        {param.isAbnormal && (
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-amber-600">
+                            Flagged
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selectedReport.reviewNotes && (
               <div>
                 <h4 className="text-xs font-semibold uppercase text-slate-500 mb-1">Doctor Review Remarks</h4>

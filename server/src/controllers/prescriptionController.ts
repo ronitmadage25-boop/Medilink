@@ -1,86 +1,120 @@
 import { Response } from 'express';
-import { Prescription } from '../models/Prescription';
-import { Notification } from '../models/Notification';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
-import mongoose from 'mongoose';
 
 export const getPrescriptions = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '10' } = req.query as Record<string, string>;
+  const { page = '1', limit = '50' } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(50, parseInt(limit, 10));
   const role = req.user!.role;
 
-  const filter: Record<string, unknown> = { isActive: true };
-  if (role === 'PATIENT') filter.patient = req.user!._id;
-  else if (role === 'DOCTOR') filter.doctor = req.user!._id;
+  const where: any = {};
+  if (role === 'PATIENT') where.patientId = req.user!.id;
+  else if (role === 'DOCTOR') where.doctorId = req.user!.id;
 
   const [prescriptions, total] = await Promise.all([
-    Prescription.find(filter)
-      .populate('patient', 'name email')
-      .populate('doctor', 'name')
-      .sort({ prescriptionDate: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    Prescription.countDocuments(filter),
+    prisma.prescription.findMany({
+      where,
+      include: {
+        patient: { select: { id: true, name: true, email: true } },
+        doctor: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (pageNum - 1) * limitNum,
+      take: limitNum,
+    }),
+    prisma.prescription.count({ where }),
   ]);
+
+  const formatted = prescriptions.map((p) => ({
+    ...p,
+    _id: p.id,
+    patient: { ...p.patient, _id: p.patient.id },
+    doctor: { ...p.doctor, _id: p.doctor.id },
+  }));
 
   res.json({
     success: true,
-    data: { prescriptions, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+    data: {
+      prescriptions: formatted,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    },
   });
 };
 
 export const getPrescriptionById = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid prescription ID.', 400);
+  const id = String(req.params.id);
 
-  const prescription = await Prescription.findById(id)
-    .populate('patient', 'name email mobile')
-    .populate('doctor', 'name email')
-    .lean();
+  const prescription = await prisma.prescription.findUnique({
+    where: { id },
+    include: {
+      patient: { select: { id: true, name: true, email: true, mobile: true } },
+      doctor: { select: { id: true, name: true, email: true } },
+    },
+  });
 
-  if (!prescription || !prescription.isActive) throw new AppError('Prescription not found.', 404);
+  if (!prescription) throw new AppError('Prescription record not found.', 404);
 
-  const userId = req.user!._id.toString();
-  const role = req.user!.role;
-  const isOwner =
-    role === 'ADMIN' ||
-    prescription.patient._id.toString() === userId ||
-    prescription.doctor._id.toString() === userId;
+  const userId = req.user!.id;
+  const isAuthorized =
+    prescription.patientId === userId ||
+    prescription.doctorId === userId ||
+    req.user!.role === 'ADMIN';
 
-  if (!isOwner) throw new AppError('Not authorised to view this prescription.', 403);
+  if (!isAuthorized) throw new AppError('Access forbidden to this prescription.', 403);
 
-  res.json({ success: true, data: { prescription } });
+  const pAny = prescription as any;
+
+  res.json({
+    success: true,
+    data: {
+      prescription: {
+        ...prescription,
+        _id: prescription.id,
+        patient: pAny.patient ? { ...pAny.patient, _id: pAny.patient.id } : null,
+        doctor: pAny.doctor ? { ...pAny.doctor, _id: pAny.doctor.id } : null,
+      },
+    },
+  });
 };
 
 export const createPrescription = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { patientId, medications, diagnosis, notes, followUpDate } = req.body as {
-    patientId: string;
-    medications: Array<{ name: string; dosage: string; frequency: string; duration: string; instructions?: string }>;
-    diagnosis?: string;
-    notes?: string;
-    followUpDate?: string;
-  };
+  const { patientId, medications, diagnosis, advice, followUpDate, appointmentId } = req.body;
 
-  const prescription = await Prescription.create({
-    patient: patientId,
-    doctor: req.user!._id,
-    medications,
-    diagnosis,
-    notes,
-    followUpDate: followUpDate ? new Date(followUpDate) : undefined,
-    prescriptionDate: new Date(),
+  if (!patientId || !medications || !diagnosis) {
+    throw new AppError('Patient ID, medications regimen, and diagnosis are required.', 400);
+  }
+
+  const prescription = await prisma.prescription.create({
+    data: {
+      patientId,
+      doctorId: req.user!.id,
+      appointmentId: appointmentId || null,
+      diagnosis,
+      medications,
+      advice: advice || null,
+      followUpDate: followUpDate ? new Date(followUpDate) : null,
+    },
   });
 
-  await Notification.create({
-    recipient: patientId,
-    type: 'PRESCRIPTION_CREATED',
-    title: 'New Prescription',
-    message: `Dr. ${req.user!.name} has issued you a new prescription.`,
-    link: `/prescriptions/${prescription._id}`,
+  // Notify Patient
+  await prisma.notification.create({
+    data: {
+      recipientId: patientId,
+      title: 'Digital Prescription Issued',
+      message: `Dr. ${req.user!.name} has issued your medication regimen for ${diagnosis}.`,
+      type: 'PRESCRIPTION',
+    },
   });
 
-  res.status(201).json({ success: true, data: { prescription } });
+  res.status(201).json({
+    success: true,
+    data: {
+      prescription: {
+        ...prescription,
+        _id: prescription.id,
+      },
+    },
+  });
 };

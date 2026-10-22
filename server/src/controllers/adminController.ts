@@ -1,235 +1,229 @@
 import { Response } from 'express';
-import { User } from '../models/User';
-import { DoctorProfile } from '../models/DoctorProfile';
-import { DiagnosticCentreProfile } from '../models/DiagnosticCentreProfile';
-import { DiagnosticReport } from '../models/DiagnosticReport';
-import { Appointment } from '../models/Appointment';
-import { AuditLog } from '../models/AuditLog';
-import { Notification } from '../models/Notification';
+import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
-import mongoose from 'mongoose';
+import { UserRole } from '@prisma/client';
 
 export const getAdminDashboard = async (_req: AuthRequest, res: Response): Promise<void> => {
   const [
     totalUsers,
-    roleDistribution,
-    pendingDoctors,
-    pendingCentres,
-    reportCount,
-    appointmentCount,
-    recentActivity,
+    totalPatients,
+    totalDoctors,
+    totalCentres,
+    pendingDoctorVerifications,
+    pendingCentreVerifications,
+    totalAppointments,
+    totalReports,
+    recentAuditLogs,
   ] = await Promise.all([
-    User.countDocuments(),
-    User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
-    DoctorProfile.countDocuments({ verificationStatus: 'PENDING' }),
-    DiagnosticCentreProfile.countDocuments({ verificationStatus: 'PENDING' }),
-    DiagnosticReport.countDocuments(),
-    Appointment.countDocuments(),
-    AuditLog.find().sort({ createdAt: -1 }).limit(10).lean(),
+    prisma.user.count(),
+    prisma.user.count({ where: { role: 'PATIENT' } }),
+    prisma.user.count({ where: { role: 'DOCTOR' } }),
+    prisma.user.count({ where: { role: 'DIAGNOSTIC_CENTRE' } }),
+    prisma.doctorProfile.count({ where: { isVerified: false } }),
+    prisma.diagnosticCentreProfile.count({ where: { isVerified: false } }),
+    prisma.appointment.count(),
+    prisma.diagnosticReport.count(),
+    prisma.auditLog.findMany({
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: { actor: { select: { id: true, name: true, email: true } } },
+    }),
   ]);
+
+  const formattedLogs = recentAuditLogs.map((l) => ({
+    ...l,
+    _id: l.id,
+    actor: l.actor ? { ...l.actor, _id: l.actor.id } : null,
+  }));
 
   res.json({
     success: true,
     data: {
-      stats: { totalUsers, reportCount, appointmentCount, pendingDoctors, pendingCentres },
-      roleDistribution,
-      recentActivity,
+      totalUsers,
+      totalPatients,
+      totalDoctors,
+      totalCentres,
+      pendingDoctorVerifications,
+      pendingCentreVerifications,
+      totalAppointments,
+      totalReports,
+      recentAuditLogs: formattedLogs,
     },
   });
 };
 
 export const getUsers = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '20', role, status, search } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, parseInt(limit, 10));
+  const { role, search } = req.query as Record<string, string>;
+  const where: any = {};
 
-  const filter: Record<string, unknown> = {};
-  if (role) filter.role = role;
-  if (status) filter.status = status;
+  if (role && role !== 'ALL') where.role = role as UserRole;
   if (search) {
-    filter.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
+    where.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } },
     ];
   }
 
-  const [users, total] = await Promise.all([
-    User.find(filter)
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    User.countDocuments(filter),
-  ]);
-
-  res.json({
-    success: true,
-    data: { users, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+  const users = await prisma.user.findMany({
+    where,
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      mobile: true,
+      isActive: true,
+      isVerified: true,
+      avatarUrl: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
   });
+
+  const formatted = users.map((u) => ({ ...u, _id: u.id }));
+  res.json({ success: true, data: { users: formatted } });
 };
 
 export const updateUserStatus = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const { status, reason } = req.body as { status: string; reason?: string };
+  const id = String(req.params.id);
+  const { isActive } = req.body as { isActive: boolean };
 
-  if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid user ID.', 400);
-
-  const user = await User.findById(id);
-  if (!user) throw new AppError('User not found.', 404);
-  if (user.role === 'ADMIN') throw new AppError('Cannot modify admin account status.', 403);
-
-  const oldStatus = user.status;
-  user.status = status as typeof user.status;
-  await user.save();
-
-  await AuditLog.create({
-    actor: req.user!._id,
-    actorRole: req.user!.role,
-    action: 'USER_STATUS_CHANGED',
-    resourceType: 'User',
-    resourceId: user._id,
-    metadata: { from: oldStatus, to: status, reason },
-    outcome: 'SUCCESS',
+  const user = await prisma.user.update({
+    where: { id },
+    data: { isActive },
   });
 
-  await Notification.create({
-    recipient: user._id,
-    type: 'SYSTEM',
-    title: 'Account Status Updated',
-    message: `Your account status has been updated to ${status}.`,
+  await prisma.auditLog.create({
+    data: {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: isActive ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
+      resourceType: 'User',
+      resourceId: user.id,
+      outcome: 'SUCCESS',
+      ipAddress: req.ip || '127.0.0.1',
+    },
   });
-
-  res.json({ success: true, message: 'User status updated.' });
-};
-
-export const verifyDoctor = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const { verificationStatus, verificationNotes } = req.body as {
-    verificationStatus: 'VERIFIED' | 'REJECTED';
-    verificationNotes?: string;
-  };
-
-  const profile = await DoctorProfile.findById(id);
-  if (!profile) throw new AppError('Doctor profile not found.', 404);
-
-  profile.verificationStatus = verificationStatus;
-  profile.verificationNotes = verificationNotes;
-  profile.verifiedAt = new Date();
-  profile.verifiedBy = req.user!._id;
-  await profile.save();
-
-  // Update user status
-  const user = await User.findById(profile.user);
-  if (user) {
-    user.status = verificationStatus === 'VERIFIED' ? 'ACTIVE' : 'INACTIVE';
-    await user.save();
-
-    await Notification.create({
-      recipient: user._id,
-      type: 'VERIFICATION_UPDATE',
-      title: verificationStatus === 'VERIFIED' ? 'Account Verified' : 'Verification Status Updated',
-      message:
-        verificationStatus === 'VERIFIED'
-          ? 'Congratulations! Your doctor account has been verified. You can now use all features.'
-          : `Your verification status has been updated to ${verificationStatus}. ${verificationNotes || ''}`,
-    });
-  }
-
-  await AuditLog.create({
-    actor: req.user!._id,
-    actorRole: req.user!.role,
-    action: 'DOCTOR_VERIFICATION',
-    resourceType: 'DoctorProfile',
-    resourceId: profile._id,
-    metadata: { verificationStatus },
-    outcome: 'SUCCESS',
-  });
-
-  res.json({ success: true, message: 'Doctor verification status updated.' });
-};
-
-export const verifyCentre = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
-  const { verificationStatus, verificationNotes } = req.body as {
-    verificationStatus: 'VERIFIED' | 'REJECTED';
-    verificationNotes?: string;
-  };
-
-  const profile = await DiagnosticCentreProfile.findById(id);
-  if (!profile) throw new AppError('Diagnostic centre profile not found.', 404);
-
-  profile.verificationStatus = verificationStatus;
-  profile.verificationNotes = verificationNotes;
-  profile.verifiedAt = new Date();
-  profile.verifiedBy = req.user!._id;
-  await profile.save();
-
-  const user = await User.findById(profile.user);
-  if (user) {
-    user.status = verificationStatus === 'VERIFIED' ? 'ACTIVE' : 'INACTIVE';
-    await user.save();
-
-    await Notification.create({
-      recipient: user._id,
-      type: 'VERIFICATION_UPDATE',
-      title:
-        verificationStatus === 'VERIFIED' ? 'Centre Verified' : 'Verification Status Updated',
-      message:
-        verificationStatus === 'VERIFIED'
-          ? 'Your diagnostic centre has been verified and can now upload reports.'
-          : `Verification: ${verificationNotes || verificationStatus}`,
-    });
-  }
-
-  await AuditLog.create({
-    actor: req.user!._id,
-    actorRole: req.user!.role,
-    action: 'CENTRE_VERIFICATION',
-    resourceType: 'DiagnosticCentreProfile',
-    resourceId: profile._id,
-    metadata: { verificationStatus },
-    outcome: 'SUCCESS',
-  });
-
-  res.json({ success: true, message: 'Centre verification status updated.' });
-};
-
-export const getPendingVerifications = async (_req: AuthRequest, res: Response): Promise<void> => {
-  const [pendingDoctors, pendingCentres] = await Promise.all([
-    DoctorProfile.find({ verificationStatus: 'PENDING' })
-      .populate('user', 'name email mobile createdAt')
-      .lean(),
-    DiagnosticCentreProfile.find({ verificationStatus: 'PENDING' })
-      .populate('user', 'name email mobile createdAt')
-      .lean(),
-  ]);
-
-  res.json({ success: true, data: { pendingDoctors, pendingCentres } });
-};
-
-export const getAdminAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { page = '1', limit = '20', action, actorId } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, parseInt(limit, 10));
-
-  const filter: Record<string, unknown> = {};
-  if (action) filter.action = { $regex: action, $options: 'i' };
-  if (actorId && mongoose.isValidObjectId(actorId)) filter.actor = actorId;
-
-  const [logs, total] = await Promise.all([
-    AuditLog.find(filter)
-      .populate('actor', 'name email role')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    AuditLog.countDocuments(filter),
-  ]);
 
   res.json({
     success: true,
-    data: { logs, pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) } },
+    data: { user: { ...user, _id: user.id } },
+    message: `Account status updated to ${isActive ? 'Active' : 'Deactivated'}.`,
   });
+};
+
+export const verifyDoctor = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.id);
+
+  // Can be doctor profile id or user id
+  const doctorProfile = await prisma.doctorProfile.findFirst({
+    where: { OR: [{ id }, { userId: id }] },
+  });
+
+  if (!doctorProfile) throw new AppError('Doctor record not found.', 404);
+
+  const updated = await prisma.doctorProfile.update({
+    where: { id: doctorProfile.id },
+    data: { isVerified: true, verifiedAt: new Date() },
+  });
+
+  await prisma.user.update({
+    where: { id: doctorProfile.userId },
+    data: { isVerified: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: 'DOCTOR_LICENSE_VERIFIED',
+      resourceType: 'DoctorProfile',
+      resourceId: doctorProfile.id,
+      outcome: 'SUCCESS',
+      ipAddress: req.ip || '127.0.0.1',
+    },
+  });
+
+  res.json({ success: true, data: { doctorProfile: updated } });
+};
+
+export const verifyCentre = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.id);
+
+  const centreProfile = await prisma.diagnosticCentreProfile.findFirst({
+    where: { OR: [{ id }, { userId: id }] },
+  });
+
+  if (!centreProfile) throw new AppError('Diagnostic centre record not found.', 404);
+
+  const updated = await prisma.diagnosticCentreProfile.update({
+    where: { id: centreProfile.id },
+    data: { isVerified: true, verifiedAt: new Date() },
+  });
+
+  await prisma.user.update({
+    where: { id: centreProfile.userId },
+    data: { isVerified: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: req.user!.id,
+      actorRole: req.user!.role,
+      action: 'CENTRE_FACILITY_VERIFIED',
+      resourceType: 'DiagnosticCentreProfile',
+      resourceId: centreProfile.id,
+      outcome: 'SUCCESS',
+      ipAddress: req.ip || '127.0.0.1',
+    },
+  });
+
+  res.json({ success: true, data: { diagnosticCentre: updated } });
+};
+
+export const getPendingVerifications = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const [doctors, diagnosticCentres] = await Promise.all([
+    prisma.doctorProfile.findMany({
+      where: { isVerified: false },
+      include: { user: { select: { id: true, name: true, email: true, mobile: true } } },
+    }),
+    prisma.diagnosticCentreProfile.findMany({
+      where: { isVerified: false },
+      include: { user: { select: { id: true, name: true, email: true, mobile: true } } },
+    }),
+  ]);
+
+  const formattedDoctors = doctors.map((d) => ({
+    ...d,
+    _id: d.id,
+    user: { ...d.user, _id: d.user.id },
+  }));
+
+  const formattedCentres = diagnosticCentres.map((c) => ({
+    ...c,
+    _id: c.id,
+    user: { ...c.user, _id: c.user.id },
+  }));
+
+  res.json({
+    success: true,
+    data: { doctors: formattedDoctors, diagnosticCentres: formattedCentres },
+  });
+};
+
+export const getAdminAuditLogs = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const logs = await prisma.auditLog.findMany({
+    take: 100,
+    orderBy: { createdAt: 'desc' },
+    include: { actor: { select: { id: true, name: true, email: true } } },
+  });
+
+  const formatted = logs.map((l) => ({
+    ...l,
+    _id: l.id,
+    actor: l.actor ? { ...l.actor, _id: l.actor.id } : null,
+  }));
+
+  res.json({ success: true, data: { logs: formatted } });
 };
