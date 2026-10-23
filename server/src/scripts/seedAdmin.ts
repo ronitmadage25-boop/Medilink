@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-import argon2 from 'argon2';
+import { hashPassword } from '../utils/password';
 import { prisma } from '../config/prisma';
 import { config } from '../config/env';
 import { logger } from '../utils/logger';
@@ -24,7 +24,7 @@ const seedAdmin = async () => {
     return;
   }
 
-  const hashedPassword = await argon2.hash(config.adminBootstrapPassword);
+  const hashedPassword = await hashPassword(config.adminBootstrapPassword);
   const admin = await prisma.user.create({
     data: {
       email: config.adminBootstrapEmail,

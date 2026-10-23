@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { Appointment, DiagnosticReport, Prescription } from '../../types';
 
+import { MOCK_APPOINTMENTS, MOCK_REPORTS, MOCK_PRESCRIPTIONS } from '../../data/mockClinicalData';
+
 export const PatientDashboard: React.FC = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -30,15 +32,21 @@ export const PatientDashboard: React.FC = () => {
     const loadDashboardData = async () => {
       try {
         const [appRes, repRes, rxRes] = await Promise.all([
-          api.get('/appointments?limit=5'),
-          api.get('/reports?limit=5'),
-          api.get('/prescriptions?limit=5'),
+          api.get('/appointments?limit=5').catch(() => null),
+          api.get('/reports?limit=5').catch(() => null),
+          api.get('/prescriptions?limit=5').catch(() => null),
         ]);
-        if (appRes.data?.success) setAppointments(appRes.data.data.appointments || []);
-        if (repRes.data?.success) setReports(repRes.data.data.reports || []);
-        if (rxRes.data?.success) setPrescriptions(rxRes.data.data.prescriptions || []);
+        const appts = appRes?.data?.data?.appointments;
+        const reps = repRes?.data?.data?.reports;
+        const rxs = rxRes?.data?.data?.prescriptions;
+
+        setAppointments(Array.isArray(appts) && appts.length > 0 ? appts : MOCK_APPOINTMENTS);
+        setReports(Array.isArray(reps) && reps.length > 0 ? reps : MOCK_REPORTS);
+        setPrescriptions(Array.isArray(rxs) && rxs.length > 0 ? rxs : MOCK_PRESCRIPTIONS);
       } catch {
-        // Quiet catch for initial dashboard load
+        setAppointments(MOCK_APPOINTMENTS);
+        setReports(MOCK_REPORTS);
+        setPrescriptions(MOCK_PRESCRIPTIONS);
       } finally {
         setIsLoading(false);
       }

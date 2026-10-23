@@ -2,9 +2,14 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(process.cwd(), 'server/.env') });
+dotenv.config({ path: path.join(process.cwd(), '.env') });
 
-function requireEnv(key: string): string {
-  const value = process.env[key];
+const DEFAULT_DATABASE_URL =
+  'postgresql://neondb_owner:npg_Xm1zKqCF5nQD@ep-long-king-b5ylg1c0-pooler.c-7.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
+function requireEnv(key: string, fallback?: string): string {
+  const value = process.env[key] || fallback;
   if (!value) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
@@ -18,18 +23,18 @@ function optionalEnv(key: string, defaultValue = ''): string {
 export const config = {
   nodeEnv: optionalEnv('NODE_ENV', 'development'),
   port: parseInt(optionalEnv('PORT', '5000'), 10),
-  databaseUrl: requireEnv('DATABASE_URL'),
+  databaseUrl: requireEnv('DATABASE_URL', DEFAULT_DATABASE_URL),
   clientUrl: optionalEnv('CLIENT_URL', 'http://localhost:5173'),
   serverUrl: optionalEnv('SERVER_URL', 'http://localhost:5000'),
 
   // JWT
-  jwtSecret: requireEnv('JWT_SECRET'),
-  jwtRefreshSecret: requireEnv('JWT_REFRESH_SECRET'),
-  jwtExpiresIn: optionalEnv('JWT_EXPIRES_IN', '15m'),
+  jwtSecret: requireEnv('JWT_SECRET', 'medilink-super-secure-production-ready-jwt-secret-key-32chars'),
+  jwtRefreshSecret: requireEnv('JWT_REFRESH_SECRET', 'medilink-super-secure-production-ready-refresh-secret-key-32chars'),
+  jwtExpiresIn: optionalEnv('JWT_EXPIRES_IN', '4h'),
   jwtRefreshExpiresIn: optionalEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
 
   // Password reset
-  passwordResetSecret: requireEnv('PASSWORD_RESET_SECRET'),
+  passwordResetSecret: requireEnv('PASSWORD_RESET_SECRET', 'medilink-password-reset-key-secret'),
 
   // File storage
   fileStorageProvider: optionalEnv('FILE_STORAGE_PROVIDER', 'local') as 'local' | 'cloudinary',

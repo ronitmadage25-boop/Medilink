@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import argon2 from 'argon2';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/prisma';
 import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
 import { UserRole } from '@prisma/client';
+import { hashPassword, verifyPassword } from '../utils/password';
 
 const getJwtSecret = () => process.env.JWT_SECRET || 'medilink-super-secure-production-ready-jwt-secret-key-32chars';
 const getRefreshSecret = () => process.env.JWT_REFRESH_SECRET || 'medilink-super-secure-production-ready-refresh-secret-key-32chars';
@@ -30,7 +30,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     throw new AppError('An account with this email address already exists.', 409);
   }
 
-  const hashedPassword = await argon2.hash(password);
+  const hashedPassword = await hashPassword(password);
   const userRole: UserRole = (role as UserRole) || 'PATIENT';
 
   const user = await prisma.user.create({
@@ -121,7 +121,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     throw new AppError('Invalid credentials. Please verify your email and password.', 401);
   }
 
-  const isValid = await argon2.verify(user.password, password);
+  const isValid = await verifyPassword(user.password, password);
   if (!isValid) {
     throw new AppError('Invalid credentials. Please verify your email and password.', 401);
   }
@@ -245,12 +245,12 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
   if (!user) throw new AppError('User not found.', 404);
 
-  const isValid = await argon2.verify(user.password, currentPassword);
+  const isValid = await verifyPassword(user.password, currentPassword);
   if (!isValid) {
     throw new AppError('Current password is incorrect.', 400);
   }
 
-  const hashedPassword = await argon2.hash(newPassword);
+  const hashedPassword = await hashPassword(newPassword);
   await prisma.user.update({
     where: { id: user.id },
     data: { password: hashedPassword },

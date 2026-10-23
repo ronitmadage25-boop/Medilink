@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { config } from './env';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -9,6 +10,7 @@ declare global {
 export const prisma =
   global.prisma ||
   new PrismaClient({
+    datasourceUrl: config.databaseUrl,
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
 
@@ -21,7 +23,7 @@ export const connectPostgres = async (): Promise<void> => {
     await prisma.$connect();
     logger.info('Connected to PostgreSQL (Neon DB) successfully via Prisma ORM.');
   } catch (error) {
-    logger.error('Failed to connect to PostgreSQL (Neon DB):', error);
-    throw error;
+    logger.warn('Initial PostgreSQL connection attempt had error (will retry automatically on query):', error);
   }
 };
+

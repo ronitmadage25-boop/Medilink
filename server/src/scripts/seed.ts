@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-import argon2 from 'argon2';
+import { hashPassword } from '../utils/password';
 import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 
@@ -13,8 +13,8 @@ export const seedDatabase = async () => {
   logger.info('Connecting to Neon PostgreSQL for database seeding...');
   await prisma.$connect();
 
-  const hashedDemoPass = await argon2.hash(DEMO_PASSWORD);
-  const hashedAdminPass = await argon2.hash(ADMIN_PASSWORD);
+  const hashedDemoPass = await hashPassword(DEMO_PASSWORD);
+  const hashedAdminPass = await hashPassword(ADMIN_PASSWORD);
 
   // 1. Seed or Upsert Patient
   const patient = await prisma.user.upsert({

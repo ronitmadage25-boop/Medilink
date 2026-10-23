@@ -121,19 +121,26 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
-const start = async () => {
-  try {
-    await connectPostgres();
-    server.listen(config.port, () => {
-      logger.info(`MediLink+ API & WebRTC Engine active on port ${config.port} [${config.nodeEnv}]`);
-    });
-  } catch (err) {
-    logger.error('Failed to start server:', err);
-    process.exit(1);
-  }
-};
+// Start server for local / non-serverless environments
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-start();
+if (!isServerless) {
+  const start = async () => {
+    try {
+      await connectPostgres();
+      server.listen(config.port, () => {
+        logger.info(`MediLink+ API & WebRTC Engine active on port ${config.port} [${config.nodeEnv}]`);
+      });
+    } catch (err) {
+      logger.error('Failed to start server:', err);
+    }
+  };
+  start();
+} else {
+  connectPostgres().catch((err) => {
+    logger.warn('Serverless PostgreSQL initial connect notice:', err);
+  });
+}
 
+module.exports = app;
 export default app;

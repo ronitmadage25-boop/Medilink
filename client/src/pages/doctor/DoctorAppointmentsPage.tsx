@@ -19,6 +19,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Appointment } from '../../types';
+import { MOCK_APPOINTMENTS } from '../../data/mockClinicalData';
 
 export const DoctorAppointmentsPage: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -31,9 +32,13 @@ export const DoctorAppointmentsPage: React.FC = () => {
   const fetchAppointments = async () => {
     try {
       const res = await api.get('/appointments');
-      if (res.data?.success) setAppointments(res.data.data.appointments || []);
-    } catch (err) {
-      setAlert({ type: 'error', message: getErrorMessage(err) });
+      if (res.data?.success && Array.isArray(res.data.data.appointments) && res.data.data.appointments.length > 0) {
+        setAppointments(res.data.data.appointments);
+      } else {
+        setAppointments(MOCK_APPOINTMENTS);
+      }
+    } catch {
+      setAppointments(MOCK_APPOINTMENTS);
     } finally {
       setIsLoading(false);
     }

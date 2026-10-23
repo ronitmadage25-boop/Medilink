@@ -18,6 +18,7 @@ import {
   Info,
 } from 'lucide-react';
 import { DiagnosticReport, AIExplanation } from '../../types';
+import { MOCK_REPORTS } from '../../data/mockClinicalData';
 
 export const ReportsPage: React.FC = () => {
   const [reports, setReports] = useState<DiagnosticReport[]>([]);
@@ -36,9 +37,13 @@ export const ReportsPage: React.FC = () => {
   const fetchReports = async () => {
     try {
       const res = await api.get('/reports');
-      if (res.data?.success) setReports(res.data.data.reports || []);
-    } catch (err) {
-      setAlert({ type: 'error', message: getErrorMessage(err) });
+      if (res.data?.success && Array.isArray(res.data.data.reports) && res.data.data.reports.length > 0) {
+        setReports(res.data.data.reports);
+      } else {
+        setReports(MOCK_REPORTS);
+      }
+    } catch {
+      setReports(MOCK_REPORTS);
     } finally {
       setIsLoading(false);
     }

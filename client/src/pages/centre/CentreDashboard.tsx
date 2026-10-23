@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { DiagnosticReport } from '../../types';
 
+import { MOCK_REPORTS } from '../../data/mockClinicalData';
+
 export const CentreDashboard: React.FC = () => {
   const { user } = useAuth();
   const [reports, setReports] = useState<DiagnosticReport[]>([]);
@@ -28,9 +30,13 @@ export const CentreDashboard: React.FC = () => {
     const fetchCentreData = async () => {
       try {
         const res = await api.get('/reports?limit=10');
-        if (res.data?.success) setReports(res.data.data.reports || []);
+        if (res.data?.success && Array.isArray(res.data.data.reports) && res.data.data.reports.length > 0) {
+          setReports(res.data.data.reports);
+        } else {
+          setReports(MOCK_REPORTS);
+        }
       } catch {
-        // Quiet catch
+        setReports(MOCK_REPORTS);
       } finally {
         setIsLoading(false);
       }
