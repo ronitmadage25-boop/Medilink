@@ -328,3 +328,33 @@ export const MOCK_DOCTORS: Array<User & { profile?: { speciality?: string; consu
     },
   },
 ];
+
+export const MOCK_PATIENTS: User[] = [
+  {
+    _id: 'usr-patient-1',
+    name: 'Priya Sharma',
+    email: 'patient@demo.medilink',
+    role: 'PATIENT',
+    mobile: '+919876543210',
+    isActive: true,
+    createdAt: '2025-01-15T00:00:00.000Z',
+  },
+  {
+    _id: 'usr-patient-2',
+    name: 'Rahul Varma',
+    email: 'rahul.varma@demo.medilink',
+    role: 'PATIENT',
+    mobile: '+919876543220',
+    isActive: true,
+    createdAt: '2025-01-20T00:00:00.000Z',
+  },
+  {
+    _id: 'usr-patient-3',
+    name: 'Amitabh Joshi',
+    email: 'amitabh.joshi@demo.medilink',
+    role: 'PATIENT',
+    mobile: '+919876543230',
+    isActive: true,
+    createdAt: '2025-02-01T00:00:00.000Z',
+  },
+];
