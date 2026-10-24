@@ -16,6 +16,7 @@ import {
   UserCheck,
   LogOut,
   X,
+  Activity,
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -63,62 +64,84 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     ],
   };
 
+  const roleGradients: Record<UserRole, string> = {
+    PATIENT: 'from-sky-500 to-blue-600',
+    DOCTOR: 'from-indigo-500 to-blue-700',
+    DIAGNOSTIC_CENTRE: 'from-teal-500 to-cyan-600',
+    ADMIN: 'from-violet-500 to-purple-700',
+  };
+
+  const roleLabels: Record<UserRole, string> = {
+    PATIENT: 'Patient Portal',
+    DOCTOR: 'Clinical Portal',
+    DIAGNOSTIC_CENTRE: 'Lab Portal',
+    ADMIN: 'Admin Console',
+  };
+
   const navItems = roleNavItems[user.role] || [];
+  const gradient = roleGradients[user.role];
+  const roleLabel = roleLabels[user.role];
+  const initials = user.name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <>
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden"
+          className="fixed inset-0 z-40 lg:hidden modal-overlay"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar Panel */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 w-64 bg-slate-900 text-slate-300 z-50 flex flex-col transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 w-64 z-50 flex flex-col transition-transform duration-300 ease-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
+        style={{ background: 'linear-gradient(180deg, #0d2247 0%, #102A56 60%, #0e1f45 100%)' }}
       >
         {/* Brand Header */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
-          <NavLink to="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
-              <HeartPulse className="w-5 h-5" />
+        <div className="h-16 flex items-center justify-between px-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+          <NavLink to="/" className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${gradient} flex items-center justify-center text-white shadow-lg shrink-0`}>
+              <Activity className="w-4.5 h-4.5" />
             </div>
-            <div>
-              <span className="font-bold text-lg text-white tracking-tight">MediLink</span>
-              <span className="text-[10px] block font-mono text-cyan-400 tracking-wider uppercase">Unified Health</span>
+            <div className="min-w-0">
+              <span className="font-bold text-base text-white tracking-tight block">MediLink</span>
+              <span className="text-[10px] font-semibold text-blue-300 tracking-widest uppercase opacity-80">{roleLabel}</span>
             </div>
           </NavLink>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 lg:hidden"
+            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 lg:hidden transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* User Role Badge */}
-        <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-950/40">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-cyan-950 border border-cyan-800/60 text-cyan-300 font-bold flex items-center justify-center text-sm">
-              {user.name.charAt(0).toUpperCase()}
+        {/* User Profile Card */}
+        <div className="px-4 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xs font-bold shadow-md shrink-0`}>
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">{user.name}</p>
-              <span className="inline-block px-1.5 py-0.5 mt-0.5 text-[10px] font-medium bg-cyan-900/60 text-cyan-300 rounded border border-cyan-700/40 uppercase tracking-wider">
-                {user.role.replace('_', ' ')}
-              </span>
+              <p className="text-xs font-semibold text-white truncate leading-tight">{user.name}</p>
+              <p className="text-[10px] text-blue-300/80 truncate mt-0.5">{user.email}</p>
             </div>
+            <div className="w-2 h-2 rounded-full bg-green-400 shrink-0 shadow-sm shadow-green-400/50" />
           </div>
         </div>
 
-        {/* Navigation Items */}
-        <div className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          <p className="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            Main Menu
+        {/* Navigation */}
+        <div className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          <p className="px-3 text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">
+            Navigation
           </p>
           {navItems.map((item) => (
             <NavLink
@@ -126,44 +149,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               to={item.to}
               onClick={() => onClose()}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-cyan-600 text-white shadow-sm shadow-cyan-600/30 font-semibold'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
-                }`
+                `sidebar-nav-item ${isActive ? 'active' : ''}`
               }
             >
-              <span className="shrink-0">{item.icon}</span>
-              <span className="truncate">{item.label}</span>
+              <span className="shrink-0 opacity-90">{item.icon}</span>
+              <span className="truncate text-sm">{item.label}</span>
             </NavLink>
           ))}
 
-          <div className="pt-4 mt-4 border-t border-slate-800">
-            <p className="px-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Settings
+          <div className="pt-4 mt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            <p className="px-3 text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2">
+              Account
             </p>
             <NavLink
               to="/profile"
               onClick={() => onClose()}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-cyan-600 text-white shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/70'
-                }`
+                `sidebar-nav-item ${isActive ? 'active' : ''}`
               }
             >
               <UserCheck className="w-4 h-4 shrink-0" />
-              <span className="truncate">My Profile & Security</span>
+              <span className="truncate text-sm">My Profile</span>
             </NavLink>
           </div>
         </div>
 
-        {/* Footer / Logout */}
-        <div className="p-4 border-t border-slate-800">
+        {/* Logout */}
+        <div className="p-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
           <button
             onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors cursor-pointer"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer"
+            style={{ color: 'rgba(248, 113, 113, 0.85)' }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239, 68, 68, 0.1)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'rgb(248, 113, 113)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(248, 113, 113, 0.85)';
+            }}
           >
             <LogOut className="w-4 h-4" />
             <span>Sign Out</span>

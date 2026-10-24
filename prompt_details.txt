@@ -1,0 +1,61 @@
+<USER_REQUEST>
+bro the major issue is now on each part as patient or doctor or lab the mian issue is whenever i submit any features by filling info and all the issue is request 500 error its comse as it it that the major issue i want to solve it by now and also make sure that and the main thing is this  # MediLink — Complete 4-Module Premium Frontend Redesign
+
+Act as a senior UI/UX designer and frontend engineer. Redesign the entire existing **MediLink — Unified Health Platform** into a premium, professional, production-quality healthcare SaaS application.
+
+Use the attached reference image as the visual direction. Redesign all four modules together while preserving the existing project's functionality, architecture, routes, authentication, APIs, database integration, and role-based access.
+
+## 1. Overall Design System
+
+Create a consistent, modern healthcare interface with a strict **white, light-blue, and navy-blue color palette**.
+
+- Primary blue: `#1769E0`
+- Deep navy: `#102A56`
+- Background: `#F6F9FD`
+- Cards: `#FFFFFF`
+- Borders: `#E3EAF4`
+- Primary text: `#15243B`
+- Secondary text: `#718198`
+- Success: subtle green for verified, confirmed, and completed statuses.
+- Error: subtle red for genuine errors only.
+
+Design requirements:
+- Premium healthcare SaaS appearance.
+- Clean layouts, balanced spacing, clear visual hierarchy.
+- Professional typography using Inter or an equivalent modern sans-serif.
+- Subtle shadows, thin borders, rounded corners, and consistent iconography.
+- Lucide icons wherever appropriate.
+- Use blue for primary actions, navigation highlights, and important interface elements.
+- Keep the interface predominantly white. Avoid excessive gradients, saturated backgrounds, and unnecessary decorative effects.
+- Use realistic healthcare illustrations only where they improve the experience.
+- Avoid generic AI-generated dashboard aesthetics, excessive cards, oversized hero sections, meaningless charts, and decorative elements without a purpose.
+- The result must loo
+<truncated 9167 bytes>
+tive
+
+Deliver one cohesive, premium MediLink frontend across all four roles: Patient, Doctor, Diagnostic Centre, and Admin.
+
+The visual direction must be **white-first, blue-accented, minimal, trustworthy, professional, and practical**.
+
+Use the attached reference image as inspiration, but improve the real implementation with better spacing, clearer typography, realistic content density, reusable components, and functional interactions.
+
+Do not stop after generating a plan or showing a mockup. Inspect the codebase, implement the changes, test the application, and provide a concise summary of the files changed, features improved, and any remaining issues.
+
+**Priority order:** Functional correctness → clean UI/UX → consistency across modules → responsiveness → final polish.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-24T10:40:55+05:30.
+
+The user's current state is as follows:
+Active Document: c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\.env (LANGUAGE_UNSPECIFIED)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\utils\logger.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\controllers\adminController.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\controllers\authController.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\adapters\s3StorageAdapter.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\routes\callSchedules.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (Low) to Claude Sonnet 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

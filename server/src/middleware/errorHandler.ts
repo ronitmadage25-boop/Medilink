@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import { config } from '../config/env';
 
 export const errorHandler = (
-  err: Error,
+  err: Error & { code?: string | number; meta?: Record<string, unknown>; clientVersion?: string },
   req: Request,
   res: Response,
   _next: NextFunction
@@ -19,37 +19,52 @@ export const errorHandler = (
     return;
   }
 
-  // Mongoose duplicate key error
-  if ((err as { code?: number }).code === 11000) {
-    const keyValue = (err as { keyValue?: Record<string, unknown> }).keyValue;
-    const field = keyValue ? Object.keys(keyValue)[0] : 'field';
-    logger.warn(`Duplicate key error: ${field}`);
+  // Prisma unique constraint violation
+  if (err.code === 'P2002') {
+    const target = Array.isArray(err.meta?.target) ? err.meta.target.join(', ') : 'field';
+    logger.warn(`Prisma unique constraint error on ${target}`);
     res.status(409).json({
       success: false,
-      message: `An account with this ${field} already exists.`,
+      message: `A record with this ${target} already exists.`,
     });
     return;
   }
 
-  // Mongoose validation error
-  if (err.name === 'ValidationError') {
-    const valErr = err as unknown as { errors?: Record<string, { message: string }> };
-    const messages = valErr.errors
-      ? Object.values(valErr.errors).map((e) => e.message)
-      : ['Validation failed'];
+  // Prisma foreign key constraint violation
+  if (err.code === 'P2003') {
+    const field = err.meta?.field_name || 'relation';
+    logger.warn(`Prisma foreign key error: ${field}`);
     res.status(400).json({
       success: false,
-      message: 'Validation failed.',
-      errors: messages,
+      message: 'The referenced user or record does not exist in the database.',
     });
     return;
   }
 
-  // Mongoose CastError (invalid ObjectId)
-  if (err.name === 'CastError') {
-    res.status(400).json({
+  // Prisma record not found
+  if (err.code === 'P2025') {
+    res.status(404).json({
       success: false,
-      message: 'Invalid resource identifier.',
+      message: 'The requested record was not found or has been removed.',
+    });
+    return;
+  }
+
+  // Prisma connection / database initialization error
+  if (err.name === 'PrismaClientInitializationError' || err.name === 'PrismaClientRustPanicError') {
+    logger.error(`Prisma connection error: ${err.message}`);
+    res.status(503).json({
+      success: false,
+      message: 'Database service is connecting or temporarily unreachable. Please retry.',
+    });
+    return;
+  }
+
+  // Mongoose duplicate key error (legacy)
+  if (err.code === 11000) {
+    res.status(409).json({
+      success: false,
+      message: 'An account with this field already exists.',
     });
     return;
   }
