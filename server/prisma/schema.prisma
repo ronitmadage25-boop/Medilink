@@ -1,0 +1,272 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  DIAGNOSTIC_CENTRE
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum AppointmentType {
+  IN_PERSON
+  VIDEO
+  AUDIO
+}
+
+enum SeverityLevel {
+  MILD
+  MODERATE
+  SEVERE
+}
+
+enum ReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+}
+
+enum CallFrequency {
+  DAILY
+  EVERY_OTHER_DAY
+  WEEKLY
+  NONE
+}
+
+model User {
+  id              String      @id @default(uuid())
+  email           String      @unique
+  password        String
+  name            String
+  role            UserRole    @default(PATIENT)
+  mobile          String?
+  isActive        Boolean     @default(true)
+  isVerified      Boolean     @default(false)
+  avatarUrl       String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Profiles
+  patientProfile  PatientProfile?
+  doctorProfile   DoctorProfile?
+  centreProfile   DiagnosticCentreProfile?
+
+  // Relations as patient
+  patientAppointments  Appointment[]         @relation("PatientAppointments")
+  patientReports       DiagnosticReport[]    @relation("PatientReports")
+  patientPrescriptions Prescription[]        @relation("PatientPrescriptions")
+  symptomCheckIns      SymptomCheckIn[]
+  callSchedule         CallSchedule?
+  aiExplanations       AIExplanation[]
+  notifications        Notification[]
+
+  // Relations as doctor
+  doctorAppointments   Appointment[]         @relation("DoctorAppointments")
+  doctorPrescriptions  Prescription[]        @relation("DoctorPrescriptions")
+  referredReports      DiagnosticReport[]    @relation("DoctorReferredReports")
+  reviewedReports      DiagnosticReport[]    @relation("DoctorReviewedReports")
+
+  // Relations as diagnostic centre
+  centreReports        DiagnosticReport[]    @relation("CentreReports")
+
+  // Audit Logs
+  auditLogs            AuditLog[]
+}
+
+model PatientProfile {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth       DateTime?
+  gender            String?
+  bloodGroup        String?
+  address           String?
+  district          String?
+  allergies         String[]  @default([])
+  chronicConditions String[]  @default([])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model DoctorProfile {
+  id                        String    @id @default(uuid())
+  userId                    String    @unique
+  user                      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization            String    @default("General Medicine")
+  qualifications            String[]  @default([])
+  experienceYears           Int       @default(0)
+  registrationNumber        String    @unique
+  consultationFee           Float     @default(500)
+  clinicAddress             String?
+  bio                       String?
+  isVerified                Boolean   @default(false)
+  verifiedAt                DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+}
+
+model DiagnosticCentreProfile {
+  id                  String    @id @default(uuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centreName          String
+  registrationNumber  String    @unique
+  address             String?
+  district            String?
+  contactNumber       String?
+  availableTests      String[]  @default([])
+  isVerified          Boolean   @default(false)
+  verifiedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Appointment {
+  id                  String            @id @default(uuid())
+  patientId           String
+  patient             User              @relation("PatientAppointments", fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId            String
+  doctor              User              @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
+  appointmentDate     DateTime
+  startTime           String
+  endTime             String
+  status              AppointmentStatus @default(PENDING)
+  type                AppointmentType   @default(IN_PERSON)
+  reason              String?
+  notes               String?
+  cancellationReason  String?
+  rescheduledFrom     String?
+  roomCode            String?           @unique
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  prescriptions       Prescription[]
+}
+
+model Prescription {
+  id            String       @id @default(uuid())
+  patientId     String
+  patient       User         @relation("PatientPrescriptions", fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  doctor        User         @relation("DoctorPrescriptions", fields: [doctorId], references: [id], onDelete: Cascade)
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  diagnosis     String
+  medications   Json
+  advice        String?
+  followUpDate  DateTime?
+  createdAt     DateTime     @default(now())
+}
+
+model DiagnosticReport {
+  id                  String       @id @default(uuid())
+  patientId           String
+  patient             User         @relation("PatientReports", fields: [patientId], references: [id], onDelete: Cascade)
+  diagnosticCentreId  String
+  diagnosticCentre    User         @relation("CentreReports", fields: [diagnosticCentreId], references: [id], onDelete: Cascade)
+  referringDoctorId   String?
+  referringDoctor     User?        @relation("DoctorReferredReports", fields: [referringDoctorId], references: [id], onDelete: SetNull)
+  testType            String
+  testDate            DateTime     @default(now())
+  findings            String?
+  notes               String?
+  fileKey             String?
+  fileName            String?
+  fileUrl             String?
+  fileSize            Int?
+  mimeType            String?
+  ocrRawText          String?
+  ocrParsedData       Json?
+  reviewStatus        ReviewStatus @default(PENDING_REVIEW)
+  reviewedById        String?
+  reviewedBy          User?        @relation("DoctorReviewedReports", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNotes         String?
+  reviewedAt          DateTime?
+  isActive            Boolean      @default(true)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  aiExplanations      AIExplanation[]
+}
+
+model AIExplanation {
+  id                  String           @id @default(uuid())
+  patientId           String
+  patient             User             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  reportId            String
+  report              DiagnosticReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  explanation         String
+  terminology         Json?
+  suggestedQuestions  String[]         @default([])
+  provider            String           @default("demo")
+  aiModel             String?
+  isDemo              Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  recipientId String
+  recipient   User     @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String   @default("SYSTEM")
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model SymptomCheckIn {
+  id               String        @id @default(uuid())
+  patientId        String
+  patient          User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  symptoms         String[]      @default([])
+  severity         SeverityLevel @default(MILD)
+  notes            String?
+  isEmergencyAlert Boolean       @default(false)
+  doctorAlerted    Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+}
+
+model CallSchedule {
+  id             String        @id @default(uuid())
+  patientId      String        @unique
+  patient        User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  preferredTime  String        @default("10:00 AM")
+  frequency      CallFrequency @default(DAILY)
+  phone          String
+  notes          String?
+  isActive       Boolean       @default(true)
+  providerStatus String        @default("Active (Twilio IVR)")
+  lastCallAt     DateTime?
+  callLogs       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String?
+  actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorRole    String
+  action       String
+  resourceType String
+  resourceId   String?
+  ipAddress    String?
+  outcome      String   @default("SUCCESS")
+  createdAt    DateTime @default(now())
+}

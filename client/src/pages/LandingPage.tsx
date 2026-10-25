@@ -1,0 +1,307 @@
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/ui/Button';
+import {
+  HeartPulse,
+  Sparkles,
+  Stethoscope,
+  Building2,
+  ShieldCheck,
+  CalendarCheck,
+  FileCheck2,
+  Brain,
+  Activity,
+  ArrowRight,
+  Lock,
+} from 'lucide-react';
+import { UserRole } from '../types';
+
+export const LandingPage: React.FC = () => {
+  const { user, quickLogin } = useAuth();
+  const navigate = useNavigate();
+
+  const handleDemoAccess = async (role: UserRole) => {
+    try {
+      await quickLogin(role);
+      const roleRoutes: Record<UserRole, string> = {
+        PATIENT: '/patient/dashboard',
+        DOCTOR: '/doctor/dashboard',
+        DIAGNOSTIC_CENTRE: '/centre/dashboard',
+        ADMIN: '/admin/dashboard',
+      };
+      navigate(roleRoutes[role]);
+    } catch {
+      navigate('/login');
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen bg-[#071328] text-slate-100 selection:bg-blue-600 selection:text-white overflow-x-hidden font-sans">
+      {/* 
+        Full-Screen Continuously Looping Background Video
+        With subtle navy/blue dark overlay for high contrast & crisp text readability
+      */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover transform scale-105 filter brightness-75 contrast-110"
+        >
+          <source src="/background_video.mp4" type="video/mp4" />
+        </video>
+        {/* Multi-layered dark navy overlay */}
+        <div className="absolute inset-0 bg-[#0B192C]/80 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0A1628]/90 via-[#0C203E]/70 to-[#071328]/95" />
+      </div>
+
+      {/* Main Content Area (Elevated above the video) */}
+      <div className="relative z-10 flex flex-col min-h-screen">
+        {/* Navigation Header */}
+        <header className="sticky top-0 z-50 bg-[#0B1E3B]/70 backdrop-blur-xl border-b border-white/10 shadow-lg">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 sm:h-20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1769E0] to-blue-400 flex items-center justify-center text-white shadow-md shadow-blue-500/30">
+                <HeartPulse className="w-6 h-6" />
+              </div>
+              <div className="flex items-center">
+                <span className="text-xl sm:text-2xl font-black text-white tracking-tight">MediLink</span>
+                <span className="ml-2.5 text-[10px] font-semibold tracking-wider uppercase bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-full">
+                  Unified Health OS
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {user ? (
+                <Button
+                  variant="primary"
+                  className="bg-[#1769E0] hover:bg-blue-600 shadow-md shadow-blue-600/30 font-medium px-4 py-2"
+                  onClick={() => {
+                    const roleRoutes: Record<UserRole, string> = {
+                      PATIENT: '/patient/dashboard',
+                      DOCTOR: '/doctor/dashboard',
+                      DIAGNOSTIC_CENTRE: '/centre/dashboard',
+                      ADMIN: '/admin/dashboard',
+                    };
+                    navigate(roleRoutes[user.role]);
+                  }}
+                  icon={<ArrowRight className="w-4 h-4" />}
+                >
+                  Enter Dashboard
+                </Button>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <Button
+                      variant="ghost"
+                      className="text-slate-200 hover:text-white hover:bg-white/10 text-sm font-medium"
+                    >
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link to="/register">
+                    <Button
+                      variant="primary"
+                      className="bg-[#1769E0] hover:bg-blue-600 text-white shadow-md shadow-blue-600/30 text-sm font-medium"
+                    >
+                      Get Started
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* Hero Section */}
+        <section className="flex-1 flex flex-col justify-center pt-12 pb-16 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto text-center w-full">
+            {/* Pill Badge */}
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs sm:text-sm font-semibold mb-6 backdrop-blur-md shadow-sm">
+              <Sparkles className="w-4 h-4 text-blue-300 animate-pulse" />
+              <span>Next-Generation Healthcare Coordination</span>
+            </div>
+
+            {/* Headline */}
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.15] sm:leading-[1.12]">
+              Seamless clinical care, from <br className="hidden sm:inline" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 via-sky-200 to-white">
+                first consultation to diagnostic delivery.
+              </span>
+            </h1>
+
+            {/* Subheading */}
+            <p className="mt-5 text-sm sm:text-base lg:text-lg text-slate-200/90 max-w-2xl mx-auto leading-relaxed font-normal drop-shadow-sm">
+              MediLink seamlessly synchronizes Patients, Doctors, and Diagnostic Centres in a secure ecosystem.
+              Exchange verified lab reports, schedule live consultations, and access AI health summaries.
+            </p>
+
+            {/* 1-Click Instant Demo Access Box */}
+            <div className="mt-8 sm:mt-10 p-5 sm:p-7 bg-[#0E203C]/80 border border-white/15 rounded-2xl max-w-4xl mx-auto shadow-2xl backdrop-blur-xl">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <p className="text-xs font-bold text-blue-200 uppercase tracking-widest">
+                  Live Role Sandboxes — 1-Click Instant Demo Access
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                {/* Patient Card */}
+                <button
+                  onClick={() => handleDemoAccess('PATIENT')}
+                  className="p-3.5 sm:p-4 rounded-xl bg-white/5 hover:bg-blue-600/25 border border-white/10 hover:border-blue-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white group-hover:text-blue-200 transition-colors">
+                      Patient Portal
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-0.5">Appointments & Reports</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold text-blue-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Launch Demo →
+                  </div>
+                </button>
+
+                {/* Doctor Card */}
+                <button
+                  onClick={() => handleDemoAccess('DOCTOR')}
+                  className="p-3.5 sm:p-4 rounded-xl bg-white/5 hover:bg-sky-600/25 border border-white/10 hover:border-sky-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                    <Stethoscope className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white group-hover:text-sky-200 transition-colors">
+                      Doctor Portal
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-0.5">Prescribe & Schedule</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold text-sky-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Launch Demo →
+                  </div>
+                </button>
+
+                {/* Diagnostic Lab Card */}
+                <button
+                  onClick={() => handleDemoAccess('DIAGNOSTIC_CENTRE')}
+                  className="p-3.5 sm:p-4 rounded-xl bg-white/5 hover:bg-emerald-600/25 border border-white/10 hover:border-emerald-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white group-hover:text-emerald-200 transition-colors">
+                      Diagnostic Lab
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-0.5">Upload & AI OCR</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Launch Demo →
+                  </div>
+                </button>
+
+                {/* Admin Card */}
+                <button
+                  onClick={() => handleDemoAccess('ADMIN')}
+                  className="p-3.5 sm:p-4 rounded-xl bg-white/5 hover:bg-purple-600/25 border border-white/10 hover:border-purple-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-xs"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white group-hover:text-purple-200 transition-colors">
+                      Admin Portal
+                    </div>
+                    <div className="text-[11px] text-slate-300 mt-0.5">Audit & Governance</div>
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold text-purple-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Launch Demo →
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Feature Highlights Grid */}
+        <section className="py-14 sm:py-18 bg-[#09172E]/80 backdrop-blur-md border-t border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white">Built for Clinical Integrity</h2>
+              <p className="mt-2.5 text-xs sm:text-sm text-slate-300">
+                Modern digital infrastructure adhering to medical confidentiality, audit logging, and role separation.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-blue-400/50 transition-colors backdrop-blur-sm">
+                <div className="w-12 h-12 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30 flex items-center justify-center mb-4">
+                  <CalendarCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-white">Smart Appointment Scheduling</h3>
+                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                  Prevents double-booking automatically, supports in-person and telehealth consultations, and gives instant status notifications.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-blue-400/50 transition-colors backdrop-blur-sm">
+                <div className="w-12 h-12 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center justify-center mb-4">
+                  <FileCheck2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-white">Diagnostic Report Sharing</h3>
+                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                  Securely attached lab reports delivered straight to the patient and verified referring doctor, with strict patient privacy controls.
+                </p>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-blue-400/50 transition-colors backdrop-blur-sm">
+                <div className="w-12 h-12 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/30 flex items-center justify-center mb-4">
+                  <Brain className="w-6 h-6" />
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-white">AI Plain-Language Explanations</h3>
+                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                  Translates dense medical metrics into readable summaries and suggested doctor discussion points without substituting clinical advice.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Security & Audit Section */}
+        <section className="py-12 bg-[#061122]/90 border-t border-white/10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 sm:p-8 rounded-2xl bg-gradient-to-r from-blue-900/40 to-slate-900/60 border border-white/10 backdrop-blur-md">
+              <div>
+                <div className="flex items-center gap-2 text-blue-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                  <Lock className="w-4 h-4" /> Enterprise Security & Transparency
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-white">Every action logged. Every record protected.</h3>
+                <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                  MediLink features full audit trails, argon2 password hashing, rate limiting, and strict verification workflows for healthcare providers.
+                </p>
+              </div>
+              <Link to="/register">
+                <Button variant="primary" size="lg" className="bg-[#1769E0] hover:bg-blue-600 shadow-lg shadow-blue-600/30 whitespace-nowrap">
+                  Create Your Account
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-6 border-t border-white/10 bg-[#050D1A] text-center text-xs text-slate-400">
+          <div className="max-w-7xl mx-auto px-4">
+            <p>© 2026 MediLink Health Systems. All rights reserved. Designed for connected clinical healthcare coordination.</p>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+};

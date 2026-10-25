@@ -1,0 +1,298 @@
+<USER_REQUEST>
+bro the major issue is now on each part as patient or doctor or lab the mian issue is whenever i submit any features by filling info and all the issue is request 500 error its comse as it it that the major issue i want to solve it by now and also make sure that and the main thing is this  # MediLink — Complete 4-Module Premium Frontend Redesign
+
+Act as a senior UI/UX designer and frontend engineer. Redesign the entire existing **MediLink — Unified Health Platform** into a premium, professional, production-quality healthcare SaaS application.
+
+Use the attached reference image as the visual direction. Redesign all four modules together while preserving the existing project's functionality, architecture, routes, authentication, APIs, database integration, and role-based access.
+
+## 1. Overall Design System
+
+Create a consistent, modern healthcare interface with a strict **white, light-blue, and navy-blue color palette**.
+
+- Primary blue: `#1769E0`
+- Deep navy: `#102A56`
+- Background: `#F6F9FD`
+- Cards: `#FFFFFF`
+- Borders: `#E3EAF4`
+- Primary text: `#15243B`
+- Secondary text: `#718198`
+- Success: subtle green for verified, confirmed, and completed statuses.
+- Error: subtle red for genuine errors only.
+
+Design requirements:
+- Premium healthcare SaaS appearance.
+- Clean layouts, balanced spacing, clear visual hierarchy.
+- Professional typography using Inter or an equivalent modern sans-serif.
+- Subtle shadows, thin borders, rounded corners, and consistent iconography.
+- Lucide icons wherever appropriate.
+- Use blue for primary actions, navigation highlights, and important interface elements.
+- Keep the interface predominantly white. Avoid excessive gradients, saturated backgrounds, and unnecessary decorative effects.
+- Use realistic healthcare illustrations only where they improve the experience.
+- Avoid generic AI-generated dashboard aesthetics, excessive cards, oversized hero sections, meaningless charts, and decorative elements without a purpose.
+- The result must look like a carefully designed real-world product, not a template or a student project.
+
+## 2. Patient Portal
+
+Redesign the patient experience at `/patient/dashboard` and all associated patient pages.
+
+### Sidebar navigation
+- Overview
+- Appointments
+- Diagnostic Reports
+- Prescriptions
+- AI Health Explainer
+- Symptom Check-in
+- Call Schedule
+- My Profile & Security
+- Sign Out
+
+### Dashboard
+Create a welcoming but compact header with the patient's name, a short personalized greeting, and quick actions for booking a consultation and recording symptoms.
+
+Display useful summary metrics:
+- Upcoming appointments
+- Diagnostic reports
+- Prescriptions on file
+
+Include:
+- Next scheduled consultation with doctor name, date, time, reason, and status.
+- Recent diagnostic reports with test name, date, laboratory, review status, and a view action.
+- Recent prescriptions with medicine details and relevant instructions where available.
+- A clear entry point to the AI Health Explainer.
+- Empty states when no appointments, reports, or prescriptions exist.
+
+### Patient functionality
+- Book and manage appointments.
+- View appointment details and statuses.
+- Read diagnostic reports.
+- View prescriptions.
+- Record symptoms.
+- Access AI-generated explanations of medical terminology, with appropriate medical disclaimers.
+- Manage personal details and security settings.
+
+Make the patient dashboard reassuring, simple, accessible, and understandable even for non-technical users.
+
+## 3. Doctor Portal
+
+Redesign the doctor experience at `/doctor/dashboard` and all associated doctor pages.
+
+### Sidebar navigation
+- Practice Overview
+- Appointments
+- Write Prescription
+- Patient Reports
+- Schedule
+- My Profile & Security
+- Sign Out
+
+### Dashboard
+Create a professional clinical workspace with the doctor's name, specialty, and verified status where supported by actual data.
+
+Display summary metrics:
+- Today's consultations
+- Confirmed appointments
+- Pending appointments
+- Prescriptions issued
+
+Include:
+- Upcoming patient appointments in a clean list or compact table.
+- Patient name, appointment time, consultation reason, and appointment status.
+- Quick actions to view patient reports, write prescriptions, and manage the schedule.
+- Diagnostic reports awaiting review.
+- Clear empty states when no appointments or reports are available.
+
+### Doctor functionality
+- View and manage assigned appointments.
+- Access relevant patient information.
+- Review diagnostic reports shared with the doctor.
+- Create and manage prescriptions.
+- Manage availability and schedules.
+- View professional profile and verification information.
+
+Prioritize clinical readability, fast navigation, accurate information hierarchy, and efficient workflows. Do not add unnecessary decorative charts or features that distract from patient care.
+
+## 4. Diagnostic Centre Portal
+
+Redesign the diagnostic centre experience at `/centre/dashboard` and all associated diagnostic centre pages.
+
+### Sidebar navigation
+- Centre Hub
+- Upload New Report
+- Reports
+- Review & Sign, if supported by the existing workflow
+- My Profile & Security
+- Sign Out
+
+### Dashboard
+Display the diagnostic centre's name, facility verification status where supported, and a clear primary action to upload a test report.
+
+Summary metrics:
+- Total uploaded reports
+- Awaiting doctor review
+- Reviewed and signed-off reports
+
+Include a recent report delivery table or list with:
+- Test or report name
+- Patient identification using the application's existing privacy-safe display
+- Date of test or upload
+- Assigned or reviewing doctor, where available
+- Current review status
+- View or manage action
+
+### Diagnostic centre functionality
+- Upload new diagnostic reports.
+- Associate reports with the correct patient.
+- Enter test details and upload relevant report files.
+- View report upload history.
+- Track review and sign-off statuses.
+- Access existing report records.
+- Show clear upload progress, validation errors, and success feedback.
+
+Use a clean clinical laboratory interface with strong information hierarchy, professional tables, visible statuses, and accessible upload controls.
+
+Never expose reports to unauthorized patients, doctors, or diagnostic centres.
+
+## 5. Admin Portal
+
+Redesign the administrator experience at `/admin/dashboard` and all associated administration pages.
+
+### Sidebar navigation
+- Platform Overview
+- User Management
+- Verifications
+- Audit Trail
+- System Settings
+- My Profile & Security
+- Sign Out
+
+### Dashboard
+Create an enterprise-style administration workspace with a compact header and a clear overview of platform health.
+
+Display platform metrics:
+- Total patients
+- Registered doctors
+- Diagnostic centres
+- Total consultations
+
+Use actual backend data. If data is unavailable, show an appropriate loading, unavailable, or empty state rather than fabricated numbers.
+
+Include:
+- Pending doctor verification requests.
+- Pending diagnostic centre verification requests.
+- Recent platform activity and audit events.
+- Useful filters and search where relevant.
+- Clear actions to review verification requests and manage accounts.
+- Charts only when they communicate meaningful trends using real data.
+
+### Admin functionality
+- View and manage platform users according to existing permissions.
+- Review provider verification requests.
+- Inspect audit logs.
+- Monitor system activity and relevant platform statistics.
+- Manage supported system settings.
+- Show useful error states and recovery actions when API requests fail.
+
+Fix existing admin dashboard API errors, including HTTP 500 failures, by tracing the actual backend requests and resolving the root cause where possible. Do not hide errors or replace failed API responses with fake statistics.
+
+Admin-only functions must remain restricted to authorized administrators.
+
+## 6. Shared Layout and Components
+
+Build a consistent design system shared across all four modules.
+
+### Header
+- MediLink logo and brand identity.
+- Current workspace or breadcrumb.
+- Search only where genuinely useful.
+- Notifications where supported.
+- Profile avatar and account menu.
+
+### Sidebar
+- Consistent width and spacing.
+- White or very light background.
+- Dark navy text and blue active navigation states.
+- Clear icons and readable labels.
+- Responsive collapsible behavior on smaller screens.
+- Persistent, intuitive navigation across pages.
+
+### Reusable components
+Create reusable components for:
+- Dashboard layouts
+- Navigation and headers
+- Metric cards
+- Data tables and lists
+- Status badges
+- Buttons and form controls
+- Search and filtering
+- Modal dialogs
+- Loading skeletons
+- Empty states
+- Error messages and toast notifications
+- Pagination where required
+
+Use consistent spacing, typography, button sizes, border radii, and interaction states throughout the application.
+
+## 7. Functional and Technical Requirements
+
+Before changing code, inspect the existing repository, package files, routes, components, API services, authentication flow, database schema, and styling conventions.
+
+Then implement the redesign directly in the existing project.
+
+Important constraints:
+1. Preserve the current technology stack unless a genuine technical issue requires a change.
+2. Preserve all existing working features and backend integrations.
+3. Do not rebuild the project from scratch unnecessarily.
+4. Do not replace functional API calls with hardcoded demo data.
+5. Preserve role-based routing and access control for Patient, Doctor, Diagnostic Centre, and Admin.
+6. Keep all existing routes functional.
+7. Connect every visible button and navigation item to its intended action.
+8. Implement form validation, loading states, empty states, error states, and success feedback.
+9. Ensure responsive behavior on desktop, tablet, and mobile.
+10. Follow accessible color contrast, keyboard navigation, and appropriate form labels.
+11. Avoid duplicated components, unnecessary dependencies, and oversized files.
+12. Do not expose secrets, API keys, private patient information, or sensitive environment variables.
+13. Use realistic sample data only in an explicitly isolated demo environment.
+14. Preserve existing data models and API contracts unless a necessary change is identified and implemented safely.
+
+## 8. Quality Assurance
+
+After implementation:
+
+- Run the project's available lint and build commands.
+- Fix compilation errors and broken imports.
+- Verify all four dashboard routes.
+- Test sidebar navigation and role switching if demo switching already exists.
+- Verify that appointment, prescription, report-upload, verification, and profile workflows remain functional.
+- Check API error handling, especially the admin dashboard's HTTP 500 issue.
+- Check responsive layouts and long-content behavior.
+- Remove accidental horizontal scrolling, inconsistent spacing, and broken layouts.
+- Verify that no button is decorative when it should perform an action.
+
+## Final Objective
+
+Deliver one cohesive, premium MediLink frontend across all four roles: Patient, Doctor, Diagnostic Centre, and Admin.
+
+The visual direction must be **white-first, blue-accented, minimal, trustworthy, professional, and practical**.
+
+Use the attached reference image as inspiration, but improve the real implementation with better spacing, clearer typography, realistic content density, reusable components, and functional interactions.
+
+Do not stop after generating a plan or showing a mockup. Inspect the codebase, implement the changes, test the application, and provide a concise summary of the files changed, features improved, and any remaining issues.
+
+**Priority order:** Functional correctness → clean UI/UX → consistency across modules → responsiveness → final polish.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-24T10:40:55+05:30.
+
+The user's current state is as follows:
+Active Document: c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\.env (LANGUAGE_UNSPECIFIED)
+Cursor is on line: 1
+Other open documents:
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\utils\logger.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\controllers\adminController.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\controllers\authController.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\adapters\s3StorageAdapter.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\RONIT MADAGE\OneDrive\Desktop\SEM 5\PROJECTS\Medilink\server\src\routes\callSchedules.ts (LANGUAGE_TYPESCRIPT)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (Low) to Claude Sonnet 4.6 (Thinking). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

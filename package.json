@@ -1,0 +1,26 @@
+{
+  "name": "medilink-workspace",
+  "version": "1.0.0",
+  "description": "MediLink - Unified Full-Stack Healthcare Coordination Platform",
+  "private": true,
+  "scripts": {
+    "server": "npm --prefix server run dev",
+    "client": "npm --prefix client run dev",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run build:server && npm run build:client",
+    "seed": "npm --prefix server run seed",
+    "seed:admin": "npm --prefix server run seed:admin",
+    "install:all": "npm --prefix server install && npm --prefix client install"
+  },
+  "keywords": [
+    "healthcare",
+    "fullstack",
+    "react",
+    "express",
+    "mongodb",
+    "typescript"
+  ],
+  "author": "MediLink Systems",
+  "license": "ISC"
+}
