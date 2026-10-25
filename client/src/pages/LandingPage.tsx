@@ -103,12 +103,6 @@ export const LandingPage: React.FC = () => {
         {/* Hero Section */}
         <section className="flex-1 flex flex-col justify-center pt-12 pb-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-5xl mx-auto text-center w-full">
-            {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/30 border border-white/20 text-blue-200 text-xs sm:text-sm font-semibold mb-6 backdrop-blur-md shadow-sm">
-              <Sparkles className="w-4 h-4 text-blue-300 animate-pulse" />
-              <span>Next-Generation Healthcare Coordination</span>
-            </div>
-
             {/* Headline */}
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.15] sm:leading-[1.12] drop-shadow-lg">
               Seamless clinical care, from <br className="hidden sm:inline" />
@@ -124,7 +118,7 @@ export const LandingPage: React.FC = () => {
             </p>
 
             {/* Role Portals Glass Container */}
-            <div className="mt-8 sm:mt-10 p-5 sm:p-7 bg-black/30 border border-white/20 rounded-2xl max-w-4xl mx-auto shadow-2xl backdrop-blur-md">
+            <div className="mt-8 sm:mt-10 p-5 sm:p-7 bg-black/30 border border-white/20 rounded-2xl max-w-3xl mx-auto shadow-2xl backdrop-blur-md">
               <div className="flex items-center justify-center gap-2 mb-4">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
                 <p className="text-xs font-bold text-slate-200 uppercase tracking-widest drop-shadow-sm">
@@ -132,13 +126,13 @@ export const LandingPage: React.FC = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4">
                 {/* Patient Card */}
                 <Link
                   to="/login"
-                  className="p-3.5 sm:p-4 rounded-xl bg-white/10 hover:bg-blue-600/30 border border-white/15 hover:border-blue-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
+                  className="p-4 rounded-xl bg-white/10 hover:bg-blue-600/30 border border-white/15 hover:border-blue-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/30 text-blue-200 border border-blue-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                  <div className="w-11 h-11 rounded-xl bg-blue-500/30 text-blue-200 border border-blue-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
                     <Activity className="w-5 h-5" />
                   </div>
                   <div>
@@ -147,7 +141,7 @@ export const LandingPage: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-slate-200 mt-0.5">Appointments & Reports</div>
                   </div>
-                  <div className="mt-2 text-[10px] font-semibold text-blue-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <div className="mt-2.5 text-[10px] font-semibold text-blue-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     Access Portal →
                   </div>
                 </Link>
@@ -155,9 +149,9 @@ export const LandingPage: React.FC = () => {
                 {/* Doctor Card */}
                 <Link
                   to="/login"
-                  className="p-3.5 sm:p-4 rounded-xl bg-white/10 hover:bg-sky-600/30 border border-white/15 hover:border-sky-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
+                  className="p-4 rounded-xl bg-white/10 hover:bg-sky-600/30 border border-white/15 hover:border-sky-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-sky-500/30 text-sky-200 border border-sky-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                  <div className="w-11 h-11 rounded-xl bg-sky-500/30 text-sky-200 border border-sky-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
                     <Stethoscope className="w-5 h-5" />
                   </div>
                   <div>
@@ -166,7 +160,7 @@ export const LandingPage: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-slate-200 mt-0.5">Prescribe & Schedule</div>
                   </div>
-                  <div className="mt-2 text-[10px] font-semibold text-sky-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <div className="mt-2.5 text-[10px] font-semibold text-sky-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     Access Portal →
                   </div>
                 </Link>
@@ -174,9 +168,9 @@ export const LandingPage: React.FC = () => {
                 {/* Diagnostic Lab Card */}
                 <Link
                   to="/login"
-                  className="p-3.5 sm:p-4 rounded-xl bg-white/10 hover:bg-emerald-600/30 border border-white/15 hover:border-emerald-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
+                  className="p-4 rounded-xl bg-white/10 hover:bg-emerald-600/30 border border-white/15 hover:border-emerald-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
                     <Building2 className="w-5 h-5" />
                   </div>
                   <div>
@@ -185,26 +179,7 @@ export const LandingPage: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-slate-200 mt-0.5">Upload & AI OCR</div>
                   </div>
-                  <div className="mt-2 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                    Access Portal →
-                  </div>
-                </Link>
-
-                {/* Admin Card */}
-                <Link
-                  to="/login"
-                  className="p-3.5 sm:p-4 rounded-xl bg-white/10 hover:bg-purple-600/30 border border-white/15 hover:border-purple-400 transition-all text-center group cursor-pointer backdrop-blur-md flex flex-col items-center justify-between shadow-sm"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/30 text-purple-200 border border-purple-400/40 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-white group-hover:text-purple-200 transition-colors drop-shadow-sm">
-                      Admin Portal
-                    </div>
-                    <div className="text-[11px] text-slate-200 mt-0.5">Audit & Governance</div>
-                  </div>
-                  <div className="mt-2 text-[10px] font-semibold text-purple-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <div className="mt-2.5 text-[10px] font-semibold text-emerald-300 uppercase tracking-wider flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     Access Portal →
                   </div>
                 </Link>
