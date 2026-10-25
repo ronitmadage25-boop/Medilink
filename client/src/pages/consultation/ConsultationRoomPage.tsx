@@ -303,50 +303,29 @@ export const ConsultationRoomPage: React.FC = () => {
           socket.on('connect', emitJoin);
         }
 
-        socket.on('room-joined', (data: { roomCode: string; existingParticipants: any[] }) => {
+        socket.on('room-joined', async (data: { roomCode: string; existingParticipants: any[] }) => {
           if (data.existingParticipants && data.existingParticipants.length > 0) {
             const peer = data.existingParticipants[0];
             setPeerInfo({ name: peer.userName, role: peer.userRole });
             // Initiate WebRTC offer as the joining peer
-            handleInitiateOffer();
+            await handleInitiateOffer();
           }
         });
 
-        socket.on('user-connected', (data: { socketId: string; userName: string; userRole: string }) => {
+        socket.on('user-connected', async (data: { socketId: string; userName: string; userRole: string }) => {
           setPeerInfo({ name: data.userName, role: data.userRole });
-        });
-
-        socket.on('webrtc-offer', async (data: { offer: RTCSessionDescriptionInit; from: string }) => {
-          const pc = createPeerConnection();
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-          isRemoteDescriptionSet.current = true;
-
-          // Drain queued ICE candidates
-          while (candidateQueue.current.length > 0) {
-            const cand = candidateQueue.current.shift();
-            if (cand && peerConnectionRef.current) {
-              try {
-                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
-              } catch {
-                // ignore
-              }
+          // If we are already in the room and another user connected, wait slightly and initiate offer if not connected
+          setTimeout(async () => {
+            if (!peerConnectionRef.current || peerConnectionRef.current.signalingState === 'stable') {
+              await handleInitiateOffer();
             }
-          }
-
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-
-          socket.emit('webrtc-answer', {
-            answer,
-            roomCode,
-          });
+          }, 800);
         });
 
-        socket.on('webrtc-answer', async (data: { answer: RTCSessionDescriptionInit }) => {
-          if (peerConnectionRef.current) {
-            await peerConnectionRef.current.setRemoteDescription(
-              new RTCSessionDescription(data.answer)
-            );
+        socket.on('webrtc-offer', async (data: { offer: RTCSessionDescriptionInit; from?: string }) => {
+          try {
+            const pc = createPeerConnection();
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             isRemoteDescriptionSet.current = true;
 
             // Drain queued ICE candidates
@@ -360,12 +339,47 @@ export const ConsultationRoomPage: React.FC = () => {
                 }
               }
             }
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            socket.emit('webrtc-answer', {
+              answer,
+              roomCode,
+            });
+          } catch (offerErr) {
+            console.error('Error handling WebRTC offer:', offerErr);
+          }
+        });
+
+        socket.on('webrtc-answer', async (data: { answer: RTCSessionDescriptionInit }) => {
+          try {
+            if (peerConnectionRef.current && peerConnectionRef.current.signalingState !== 'stable') {
+              await peerConnectionRef.current.setRemoteDescription(
+                new RTCSessionDescription(data.answer)
+              );
+              isRemoteDescriptionSet.current = true;
+
+              // Drain queued ICE candidates
+              while (candidateQueue.current.length > 0) {
+                const cand = candidateQueue.current.shift();
+                if (cand && peerConnectionRef.current) {
+                  try {
+                    await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
+                  } catch {
+                    // ignore
+                  }
+                }
+              }
+            }
+          } catch (answerErr) {
+            console.error('Error handling WebRTC answer:', answerErr);
           }
         });
 
         socket.on('webrtc-ice-candidate', async (data: { candidate: RTCIceCandidateInit }) => {
           if (data.candidate) {
-            if (isRemoteDescriptionSet.current && peerConnectionRef.current) {
+            if (isRemoteDescriptionSet.current && peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
               try {
                 await peerConnectionRef.current.addIceCandidate(
                   new RTCIceCandidate(data.candidate)

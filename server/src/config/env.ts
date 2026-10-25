@@ -44,8 +44,8 @@ export const config = {
   cloudinaryApiSecret: optionalEnv('CLOUDINARY_API_SECRET'),
 
   // AI
-  aiProvider: optionalEnv('AI_PROVIDER', 'none') as 'openai' | 'none',
-  aiApiKey: optionalEnv('AI_API_KEY'),
+  aiProvider: (optionalEnv('AI_PROVIDER') || (process.env.OPENAI || process.env.OPENAI_API_KEY || process.env.AI_API_KEY ? 'openai' : 'none')) as 'openai' | 'none',
+  aiApiKey: optionalEnv('AI_API_KEY') || optionalEnv('OPENAI_API_KEY') || optionalEnv('OPENAI'),
   aiModel: optionalEnv('AI_MODEL', 'gpt-4o'),
 
   // Telephony

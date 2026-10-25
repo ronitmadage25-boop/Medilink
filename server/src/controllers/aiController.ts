@@ -47,8 +47,8 @@ export const requestExplanation = async (req: AuthRequest, res: Response): Promi
     return;
   }
 
-  const aiKey = process.env.AI_API_KEY;
-  const isAiConfigured = process.env.AI_PROVIDER === 'openai' && aiKey;
+  const aiKey = process.env.OPENAI || process.env.OPENAI_API_KEY || process.env.AI_API_KEY || '';
+  const isAiConfigured = Boolean(aiKey && aiKey.trim().length > 0);
 
   let explanationText = `This ${report.testType} diagnostic evaluation conducted on ${new Date(report.testDate).toLocaleDateString()} provides medical indicators for clinical review.\n\nFindings Summary:\n${report.findings || 'No acute abnormalities recorded in primary metrics.'}\n\nNotes from Laboratory:\n${report.notes || 'Document processed per clinical laboratory protocol.'}\n\nNext Steps:\nDiscuss these results with your attending physician during your scheduled consultation to evaluate your overall health profile.`;
 
@@ -68,30 +68,62 @@ export const requestExplanation = async (req: AuthRequest, res: Response): Promi
   if (isAiConfigured) {
     try {
       const { OpenAI } = await import('openai');
-      const openai = new OpenAI({ apiKey: aiKey });
+      const openai = new OpenAI({ apiKey: aiKey.trim() });
 
-      const prompt = `You are a clinical educational assistant for MediLink, a healthcare coordination platform.
-Translate the following medical lab findings into clear, plain English for a patient.
-- Test Type: ${report.testType}
-- Findings: ${report.findings || 'Normal parameters'}
-- Laboratory Notes: ${report.notes || 'None'}
+      const prompt = `You are a professional medical communicator for MediLink health systems.
+Analyze the following clinical diagnostic report and provide a patient-friendly educational explanation.
 
-Include:
-1. A plain-language summary of what these numbers mean.
-2. 3 key medical terms explained simply.
-3. 3 questions the patient should ask their physician.`;
+Diagnostic Test: ${report.testType}
+Test Date: ${new Date(report.testDate).toLocaleDateString()}
+Report Findings:
+${report.findings || 'Standard physiological indices.'}
+
+Laboratory Technical Notes:
+${report.notes || 'Routine specimen analysis.'}
+
+Return your response in pure valid JSON format with the following keys:
+{
+  "explanation": "Clear, comprehensive multi-paragraph plain-language explanation of what these medical results mean in simple words.",
+  "terminology": [
+    { "term": "Medical Term 1", "definition": "Simple explanation of what this term means." },
+    { "term": "Medical Term 2", "definition": "Simple explanation of what this term means." },
+    { "term": "Medical Term 3", "definition": "Simple explanation of what this term means." }
+  ],
+  "suggestedQuestions": [
+    "Specific question 1 the patient should ask their doctor",
+    "Specific question 2 the patient should ask their doctor",
+    "Specific question 3 the patient should ask their doctor"
+  ]
+}`;
 
       const completion = await openai.chat.completions.create({
         model: process.env.AI_MODEL || 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 600,
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
       });
 
-      if (completion.choices[0]?.message?.content) {
-        explanationText = completion.choices[0].message.content;
-        isDemo = false;
+      const responseContent = completion.choices[0]?.message?.content;
+      if (responseContent) {
+        try {
+          const parsed = JSON.parse(responseContent);
+          if (parsed.explanation) {
+            explanationText = parsed.explanation;
+          }
+          if (Array.isArray(parsed.terminology) && parsed.terminology.length > 0) {
+            terminology = parsed.terminology;
+          }
+          if (Array.isArray(parsed.suggestedQuestions) && parsed.suggestedQuestions.length > 0) {
+            questions = parsed.suggestedQuestions;
+          }
+          isDemo = false;
+        } catch {
+          explanationText = responseContent;
+          isDemo = false;
+        }
       }
-    } catch {
+    } catch (openAiErr) {
+      console.error('OpenAI explanation generation encountered error, falling back to clinical intelligence engine:', openAiErr);
       // Fall through to resilient medical explanation
     }
   }
@@ -136,11 +168,12 @@ export const getExplanationHistory = async (req: AuthRequest, res: Response): Pr
     report: { ...e.report, _id: e.report.id },
   }));
 
+  const aiKey = process.env.OPENAI || process.env.OPENAI_API_KEY || process.env.AI_API_KEY || '';
   res.json({
     success: true,
     data: {
       explanations: formatted,
-      aiConfigured: process.env.AI_PROVIDER === 'openai',
+      aiConfigured: Boolean(aiKey && aiKey.trim().length > 0),
     },
   });
 };
