@@ -4,7 +4,9 @@ import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
 import { s3Storage } from '../adapters/s3StorageAdapter';
 import { ocrService } from '../services/ocrService';
+import { validateFileMagicBytes } from '../middleware/upload';
 import fs from 'fs';
+import path from 'path';
 
 export const getReports = async (req: AuthRequest, res: Response): Promise<void> => {
   const { page = '1', limit = '50', patientId, reviewStatus } = req.query as Record<string, string>;
@@ -144,21 +146,43 @@ export const createReport = async (req: AuthRequest, res: Response): Promise<voi
       buffer = Buffer.from('');
     }
 
-    // 1. Run Automated AI OCR Pipeline on the uploaded document
-    const ocrResult = await ocrService.parseDocument(buffer, mimeType);
-    ocrRawText = ocrResult.rawText;
-    ocrParsedData = ocrResult.extractedParameters;
-
-    if (!finalFindings || finalFindings.trim().length === 0) {
-      finalFindings = ocrResult.detectedFindings;
-    } else {
-      finalFindings = `${finalFindings}\n\n[Automated OCR Analysis]\n${ocrResult.detectedFindings}`;
+    // Strict Magic Bytes Validation for PDF & Images
+    const validation = validateFileMagicBytes(buffer, mimeType);
+    if (!validation.isValid) {
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+      }
+      throw new AppError(validation.error || 'Invalid file signature.', 400);
     }
 
-    // 2. Upload file to Neon S3 Storage
+    // 1. Run Automated AI OCR Pipeline on the uploaded document
+    const ocrResult = await ocrService.parseDocument(buffer, mimeType);
+    ocrRawText = ocrResult.rawText || null;
+    ocrParsedData = ocrResult.extractedParameters.length > 0 ? { parameters: ocrResult.extractedParameters } : null;
+
+    // Description Generation Priority:
+    // 1. User/technician explicitly entered findings
+    // 2. Extracted genuine findings from PDF
+    // 3. Sensible non-fabricated fallback mentioning the filename
+    if (findings && findings.trim().length > 0) {
+      finalFindings = findings.trim();
+    } else if (ocrResult.detectedFindings && ocrResult.detectedFindings.trim().length > 0) {
+      finalFindings = ocrResult.detectedFindings.trim();
+    } else {
+      finalFindings = `Certified laboratory report: ${testType} (${fileName}). Full diagnostic metrics are available in the attached PDF.`;
+    }
+
+    // 2. Upload file to Neon S3 Storage or local resilient storage
     const s3Result = await s3Storage.uploadFile(buffer, fileName, mimeType);
     fileKey = s3Result.fileKey;
     fileUrl = s3Result.fileUrl;
+
+    // Clean up temporary file
+    if (req.file.path && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+    }
+  } else if (!finalFindings || finalFindings.trim().length === 0) {
+    finalFindings = `Certified diagnostic evaluation for ${testType}.`;
   }
 
   const report = await prisma.diagnosticReport.create({
@@ -243,4 +267,102 @@ export const markReportReviewed = async (req: AuthRequest, res: Response): Promi
     success: true,
     data: { report: { ...updated, _id: updated.id } },
   });
+};
+
+export const streamReportFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.id);
+  const download = req.query.download === 'true';
+
+  const report = await prisma.diagnosticReport.findUnique({
+    where: { id },
+  });
+
+  if (!report || !report.isActive) {
+    throw new AppError('Diagnostic report not found.', 404);
+  }
+
+  // Strict Privacy Authorization Check:
+  // Authorized users:
+  // - The patient who owns the report
+  // - The diagnostic centre that uploaded the report
+  // - The referring or reviewing doctor
+  // - Any doctor who has an active/past appointment with this patient
+  // - System Administrator
+  const userId = req.user!.id;
+  const userRole = req.user!.role;
+
+  let isAuthorized = false;
+  if (userRole === 'ADMIN') {
+    isAuthorized = true;
+  } else if (report.patientId === userId) {
+    isAuthorized = true;
+  } else if (report.diagnosticCentreId === userId) {
+    isAuthorized = true;
+  } else if (report.referringDoctorId === userId || report.reviewedById === userId) {
+    isAuthorized = true;
+  } else if (userRole === 'DOCTOR') {
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        doctorId: userId,
+        patientId: report.patientId,
+      },
+    });
+    if (appointment) isAuthorized = true;
+  }
+
+  if (!isAuthorized) {
+    throw new AppError('Access forbidden: You do not have permission to view or download this patient report.', 403);
+  }
+
+  if (!report.fileName && !report.fileKey && !report.fileUrl) {
+    throw new AppError('No document file attached to this report.', 404);
+  }
+
+  const filename = report.fileName || `medical-report-${report.id}.pdf`;
+  const mime = report.mimeType || 'application/pdf';
+
+  // Audit logging of medical file access
+  await prisma.auditLog.create({
+    data: {
+      actorId: userId,
+      actorRole: userRole,
+      action: download ? 'REPORT_DOWNLOADED' : 'REPORT_VIEWED',
+      resourceType: 'DiagnosticReportFile',
+      resourceId: report.id,
+      outcome: 'SUCCESS',
+      ipAddress: req.ip || '127.0.0.1',
+    },
+  });
+
+  // 1. Check local file storage
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  let localPath: string | null = null;
+
+  if (report.fileKey) {
+    const p = path.join(uploadsDir, report.fileKey);
+    if (fs.existsSync(p)) localPath = p;
+  }
+  if (!localPath && report.fileUrl && report.fileUrl.startsWith('/uploads/')) {
+    const p = path.join(process.cwd(), report.fileUrl);
+    if (fs.existsSync(p)) localPath = p;
+  }
+
+  if (localPath && fs.existsSync(localPath)) {
+    res.setHeader('Content-Type', mime);
+    res.setHeader(
+      'Content-Disposition',
+      `${download ? 'attachment' : 'inline'}; filename="${encodeURIComponent(filename)}"`
+    );
+    const fileStream = fs.createReadStream(localPath);
+    fileStream.pipe(res);
+    return;
+  }
+
+  // 2. If S3 / remote URL
+  if (report.fileUrl && (report.fileUrl.startsWith('http://') || report.fileUrl.startsWith('https://'))) {
+    res.redirect(report.fileUrl);
+    return;
+  }
+
+  throw new AppError('Attached medical report document could not be retrieved from storage.', 404);
 };

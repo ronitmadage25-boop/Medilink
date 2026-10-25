@@ -4,6 +4,7 @@ import { AppError } from '../utils/AppError';
 import { AuthRequest } from '../middleware/auth';
 import { s3Storage } from '../adapters/s3StorageAdapter';
 import { ocrService } from '../services/ocrService';
+import { validateFileMagicBytes } from '../middleware/upload';
 import fs from 'fs';
 
 export const getDiagnosticCentreDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -99,21 +100,39 @@ export const uploadReport = async (req: AuthRequest, res: Response): Promise<voi
       buffer = Buffer.from('');
     }
 
-    // Run Automated AI OCR
-    const ocrResult = await ocrService.parseDocument(buffer, mimeType);
-    ocrRawText = ocrResult.rawText;
-    ocrParsedData = ocrResult.extractedParameters;
-
-    if (!finalFindings || finalFindings.trim().length === 0) {
-      finalFindings = ocrResult.detectedFindings;
-    } else {
-      finalFindings = `${finalFindings}\n\n[Automated OCR Analysis]\n${ocrResult.detectedFindings}`;
+    // Strict Magic Bytes Validation for PDF & Images
+    const validation = validateFileMagicBytes(buffer, mimeType);
+    if (!validation.isValid) {
+      if (file.path && fs.existsSync(file.path)) {
+        try { fs.unlinkSync(file.path); } catch { /* ignore */ }
+      }
+      throw new AppError(validation.error || 'Invalid file signature.', 400);
     }
 
-    // Upload to Neon S3
+    // Run Automated AI OCR
+    const ocrResult = await ocrService.parseDocument(buffer, mimeType);
+    ocrRawText = ocrResult.rawText || null;
+    ocrParsedData = ocrResult.extractedParameters.length > 0 ? { parameters: ocrResult.extractedParameters } : null;
+
+    // Description Generation Priority:
+    if (findings && findings.trim().length > 0) {
+      finalFindings = findings.trim();
+    } else if (ocrResult.detectedFindings && ocrResult.detectedFindings.trim().length > 0) {
+      finalFindings = ocrResult.detectedFindings.trim();
+    } else {
+      finalFindings = `Certified laboratory report: ${testType} (${fileName}). Full diagnostic metrics are available in the attached PDF.`;
+    }
+
+    // Upload to Neon S3 or local resilient storage
     const s3Result = await s3Storage.uploadFile(buffer, fileName, mimeType);
     fileKey = s3Result.fileKey;
     fileUrl = s3Result.fileUrl;
+
+    if (file.path && fs.existsSync(file.path)) {
+      try { fs.unlinkSync(file.path); } catch { /* ignore */ }
+    }
+  } else if (!finalFindings || finalFindings.trim().length === 0) {
+    finalFindings = `Certified diagnostic evaluation for ${testType}.`;
   }
 
   const report = await prisma.diagnosticReport.create({

@@ -6,7 +6,17 @@ import { StatusBadge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Alert } from '../../components/ui/Alert';
 import { Spinner } from '../../components/ui/Spinner';
-import { FileText, Calendar, User, Building2, CheckCircle2, MessageSquare } from 'lucide-react';
+import {
+  FileText,
+  Calendar,
+  User,
+  Building2,
+  CheckCircle2,
+  MessageSquare,
+  Download,
+  ExternalLink,
+  Paperclip,
+} from 'lucide-react';
 import { DiagnosticReport } from '../../types';
 
 export const DoctorReportsPage: React.FC = () => {
@@ -16,6 +26,11 @@ export const DoctorReportsPage: React.FC = () => {
   const [reviewNotes, setReviewNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // PDF Viewer State
+  const [viewingPdfReport, setViewingPdfReport] = useState<DiagnosticReport | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
 
   const fetchReports = async () => {
     try {
@@ -31,6 +46,40 @@ export const DoctorReportsPage: React.FC = () => {
   useEffect(() => {
     fetchReports();
   }, []);
+
+  const handleViewPdf = async (report: DiagnosticReport) => {
+    setViewingPdfReport(report);
+    setIsPdfLoading(true);
+    setPdfBlobUrl(null);
+    try {
+      const res = await api.get(`/reports/${report._id}/file`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: report.mimeType || 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      setPdfBlobUrl(url);
+    } catch (err) {
+      setAlert({ type: 'error', message: 'Unable to open PDF document: ' + getErrorMessage(err) });
+      setViewingPdfReport(null);
+    } finally {
+      setIsPdfLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async (report: DiagnosticReport) => {
+    try {
+      const res = await api.get(`/reports/${report._id}/file?download=true`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: report.mimeType || 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = report.fileName || `patient-report-${report.testType.toLowerCase().replace(/[^a-z0-9]/g, '-')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setAlert({ type: 'error', message: 'Download failed: ' + getErrorMessage(err) });
+    }
+  };
 
   const handleReview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,9 +169,38 @@ export const DoctorReportsPage: React.FC = () => {
                     <p className="mt-0.5">{r.reviewNotes}</p>
                   </div>
                 )}
+
+                {r.fileName && (
+                  <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-600 bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                    <span className="flex items-center gap-1.5 truncate max-w-[200px]">
+                      <Paperclip className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+                      <span className="truncate font-medium">{r.fileName}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdf(r)}
+                      className="text-cyan-700 hover:text-cyan-900 font-semibold flex items-center gap-1 shrink-0 ml-2 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" /> Download
+                    </button>
+                  </div>
+                )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div>
+                  {(r.fileName || r.fileUrl) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs text-cyan-700 border-cyan-200 hover:bg-cyan-50"
+                      icon={<FileText className="w-3.5 h-3.5" />}
+                      onClick={() => handleViewPdf(r)}
+                    >
+                      View Attached PDF
+                    </Button>
+                  )}
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -167,6 +245,40 @@ export const DoctorReportsPage: React.FC = () => {
               </div>
             )}
 
+            {(selectedReport.fileName || selectedReport.fileUrl) && (
+              <div className="p-3 bg-cyan-50/70 border border-cyan-200/80 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-cyan-700 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-slate-800">{selectedReport.fileName || 'Certified Laboratory Document'}</p>
+                    <p className="text-[10px] text-slate-500">Official medical diagnostic attachment</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs bg-white text-cyan-700 border-cyan-300 hover:bg-cyan-50"
+                    icon={<ExternalLink className="w-3.5 h-3.5" />}
+                    onClick={() => handleViewPdf(selectedReport)}
+                  >
+                    View PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                    icon={<Download className="w-3.5 h-3.5" />}
+                    onClick={() => handleDownloadPdf(selectedReport)}
+                  >
+                    Download
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                 Physician Assessment & Review Notes *
@@ -201,6 +313,54 @@ export const DoctorReportsPage: React.FC = () => {
               </Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Browser Compatible PDF Document Viewer Modal */}
+      {viewingPdfReport && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            setViewingPdfReport(null);
+            if (pdfBlobUrl) window.URL.revokeObjectURL(pdfBlobUrl);
+            setPdfBlobUrl(null);
+          }}
+          title={`Medical Report: ${viewingPdfReport.fileName || viewingPdfReport.testType}`}
+          description={`Patient: ${viewingPdfReport.patient?.name || 'Patient'} • Conducted: ${new Date(viewingPdfReport.testDate).toLocaleDateString()}`}
+          maxWidth="2xl"
+        >
+          {isPdfLoading ? (
+            <div className="py-20 flex flex-col items-center justify-center">
+              <Spinner size="lg" label="Securely loading certified PDF report from storage..." />
+            </div>
+          ) : pdfBlobUrl ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-cyan-600" />
+                  {viewingPdfReport.fileName || 'Certified Laboratory Document'}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs text-cyan-700 bg-white"
+                  icon={<Download className="w-3.5 h-3.5" />}
+                  onClick={() => handleDownloadPdf(viewingPdfReport)}
+                >
+                  Download File
+                </Button>
+              </div>
+              <iframe
+                src={pdfBlobUrl}
+                className="w-full h-[65vh] rounded-xl border border-slate-200 bg-white"
+                title={viewingPdfReport.fileName || 'Laboratory Report Document'}
+              />
+            </div>
+          ) : (
+            <div className="py-12 text-center text-xs text-slate-500">
+              Document could not be previewed.
+            </div>
+          )}
         </Modal>
       )}
     </div>

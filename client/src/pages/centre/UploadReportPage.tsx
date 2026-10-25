@@ -62,12 +62,47 @@ export const UploadReportPage: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+
+      // File size validation (20MB)
+      if (file.size > 20 * 1024 * 1024) {
+        setAlert({ type: 'error', message: 'File size exceeds maximum allowable 20MB limit.' });
+        setSelectedFile(null);
+        e.target.value = '';
+        return;
+      }
+
+      // Client-side PDF signature validation
+      if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+        const slice = file.slice(0, 5);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const arr = new Uint8Array(reader.result as ArrayBuffer);
+          const header = String.fromCharCode(...arr);
+          if (!header.startsWith('%PDF-')) {
+            setAlert({
+              type: 'error',
+              message: 'Invalid file signature: Selected file is not a legitimate PDF document. Renaming another file to .pdf is rejected.',
+            });
+            setSelectedFile(null);
+            e.target.value = '';
+          } else {
+            setSelectedFile(file);
+            setAlert(null);
+          }
+        };
+        reader.readAsArrayBuffer(slice);
+      } else {
+        setSelectedFile(file);
+        setAlert(null);
+      }
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!selectedPatientId) {
       setAlert({ type: 'error', message: 'Please select a recipient patient.' });
       return;
@@ -88,29 +123,24 @@ export const UploadReportPage: React.FC = () => {
       if (referringDoctorId) formData.append('referringDoctorId', referringDoctorId);
       formData.append('testType', finalTestType);
       formData.append('testDate', testDate);
-      if (findings) formData.append('findings', findings);
-      if (notes) formData.append('notes', notes);
+      if (findings && findings.trim()) formData.append('findings', findings.trim());
+      if (notes && notes.trim()) formData.append('notes', notes.trim());
       if (selectedFile) formData.append('file', selectedFile);
 
-      try {
-        await api.post('/reports', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-      } catch (postErr) {
-        // Also attempt diagnostic-centres path
-        try {
-          await api.post('/diagnostic-centres/reports', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        } catch {
-          // If serverless storage is cold or in demo mode, proceed with simulated success
-        }
-      }
+      await api.post('/reports', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
       setAlert({
         type: 'success',
         message: 'Report uploaded and published to patient portal successfully!',
       });
+
+      // Reset form state to prevent accidental reuse on next upload
+      setSelectedFile(null);
+      setFindings('');
+      setNotes('');
+      setCustomTestType('');
 
       setTimeout(() => {
         navigate('/centre/dashboard');

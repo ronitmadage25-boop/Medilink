@@ -31,6 +31,7 @@ import callScheduleRoutes from './routes/callSchedules';
 import aiRoutes from './routes/ai';
 import adminRoutes from './routes/admin';
 import auditRoutes from './routes/auditLogs';
+import consultationRoutes from './routes/consultations';
 
 const app = express();
 const server = http.createServer(app);
@@ -113,6 +114,7 @@ app.use(`${API_PREFIX}/call-schedules`, callScheduleRoutes);
 app.use(`${API_PREFIX}/ai`, aiRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/audit-logs`, auditRoutes);
+app.use(`${API_PREFIX}/consultations`, consultationRoutes);
 
 // Local uploads fallback
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

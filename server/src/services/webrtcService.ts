@@ -1,6 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import { logger } from '../utils/logger';
+import { prisma } from '../config/prisma';
 
 interface Participant {
   socketId: string;
@@ -178,8 +179,8 @@ export class WebRTCService {
         });
       });
 
-      // In-Call Chat Message
-      socket.on('consultation-chat-message', (data: {
+      // In-Call Chat Message (Saved to PostgreSQL and Broadcasted)
+      socket.on('consultation-chat-message', async (data: {
         roomCode?: string;
         appointmentId?: string;
         message: any;
@@ -187,10 +188,38 @@ export class WebRTCService {
         const room = data.roomCode || data.appointmentId || currentRoom;
         if (!room) return;
 
-        socket.to(room).emit('consultation-chat-message', data.message);
+        const text = data.message?.text || (typeof data.message === 'string' ? data.message : '');
+        if (!text || !text.trim()) return;
+
+        try {
+          const participant = currentRoom ? this.roomParticipants.get(currentRoom)?.get(socket.id) : null;
+          const saved = await prisma.consultationMessage.create({
+            data: {
+              roomCode: room,
+              senderId: participant?.userId || null,
+              senderName: data.message?.sender || participant?.userName || 'Healthcare Participant',
+              senderRole: data.message?.role || participant?.userRole || 'PATIENT',
+              text: text.trim(),
+            },
+          });
+
+          const msgPayload = {
+            id: saved.id,
+            sender: saved.senderName,
+            role: saved.senderRole,
+            text: saved.text,
+            timestamp: new Date(saved.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            createdAt: saved.createdAt,
+          };
+
+          this.io?.to(room).emit('consultation-chat-message', msgPayload);
+        } catch (err) {
+          logger.error('Failed to persist consultation chat message:', err);
+          this.io?.to(room).emit('consultation-chat-message', data.message);
+        }
       });
 
-      socket.on('consultation-chat', (data: {
+      socket.on('consultation-chat', async (data: {
         roomCode?: string;
         appointmentId?: string;
         message: string;
@@ -200,16 +229,40 @@ export class WebRTCService {
         const room = data.roomCode || data.appointmentId || currentRoom;
         if (!room) return;
 
-        const chatPayload = {
-          id: `msg-${Date.now()}`,
-          sender: data.senderName || 'Participant',
-          role: data.senderRole || 'PATIENT',
-          text: data.message,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
+        try {
+          const participant = currentRoom ? this.roomParticipants.get(currentRoom)?.get(socket.id) : null;
+          const saved = await prisma.consultationMessage.create({
+            data: {
+              roomCode: room,
+              senderId: participant?.userId || null,
+              senderName: data.senderName || participant?.userName || 'Healthcare Participant',
+              senderRole: data.senderRole || participant?.userRole || 'PATIENT',
+              text: data.message.trim(),
+            },
+          });
 
-        this.io?.to(room).emit('consultation-chat-message', chatPayload);
-        this.io?.to(room).emit('consultation-chat', chatPayload);
+          const chatPayload = {
+            id: saved.id,
+            sender: saved.senderName,
+            role: saved.senderRole,
+            text: saved.text,
+            timestamp: new Date(saved.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            createdAt: saved.createdAt,
+          };
+
+          this.io?.to(room).emit('consultation-chat-message', chatPayload);
+          this.io?.to(room).emit('consultation-chat', chatPayload);
+        } catch (err) {
+          logger.error('Failed to persist consultation chat message:', err);
+          const fallbackPayload = {
+            id: `msg-${Date.now()}`,
+            sender: data.senderName || 'Participant',
+            role: data.senderRole || 'PATIENT',
+            text: data.message,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+          this.io?.to(room).emit('consultation-chat-message', fallbackPayload);
+        }
       });
 
       // Leave / End Consultation
@@ -237,6 +290,12 @@ export class WebRTCService {
     });
 
     logger.info('WebRTC Signaling Engine initialized.');
+  }
+
+  broadcastToRoom(room: string, event: string, data: any) {
+    if (this.io) {
+      this.io.to(room).emit(event, data);
+    }
   }
 }
 

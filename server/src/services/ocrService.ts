@@ -23,45 +23,42 @@ export class OCRService {
       if (mimeType === 'application/pdf') {
         logger.info('Processing PDF via document text stream extractor...');
         try {
-          const pdfParse = (await import('pdf-parse')).default;
+          const pdfModule = await import('pdf-parse');
+          const pdfParse = typeof pdfModule === 'function' ? pdfModule : (pdfModule.default || pdfModule);
           const pdfData = await pdfParse(fileBuffer);
-          rawText = pdfData.text || '';
+          rawText = (pdfData && pdfData.text) ? pdfData.text.trim() : '';
         } catch (pdfErr) {
           logger.warn('pdf-parse error, attempting buffer text decode fallback:', pdfErr);
-          rawText = fileBuffer.toString('utf-8').replace(/[^\x20-\x7E\n]/g, ' ');
+          rawText = fileBuffer.toString('utf-8').replace(/[^\x20-\x7E\n]/g, ' ').trim();
         }
       } else {
         logger.info('Processing image report via Tesseract OCR engine...');
         try {
           const Tesseract = await import('tesseract.js');
           const { data } = await Tesseract.recognize(fileBuffer, 'eng');
-          rawText = data.text || '';
+          rawText = (data && data.text) ? data.text.trim() : '';
         } catch (tessErr) {
-          logger.warn('Tesseract OCR engine failed, using text parser fallback:', tessErr);
-          rawText = 'Diagnostic test scanned document. Values extracted from uploaded clinical requisition.';
+          logger.warn('Tesseract OCR engine failed, cannot extract text:', tessErr);
+          rawText = '';
         }
       }
 
-      if (!rawText.trim()) {
-        rawText = 'Complete Blood Count Panel\nHaemoglobin: 13.8 g/dL (Reference: 13.0 - 17.5)\nWhite Blood Cells: 7,400 /mcL (Reference: 4,500 - 11,000)\nPlatelets: 230,000 /mcL (Reference: 150,000 - 450,000)\nRBC: 4.8 million/mcL (Reference: 4.5 - 5.9)\nFasting Blood Glucose: 92 mg/dL (Reference: 70 - 99)';
-      }
-
-      const extractedParameters = this.extractClinicalParameters(rawText);
-      const detectedFindings = this.buildFindingsSummary(extractedParameters, rawText);
+      const extractedParameters = rawText ? this.extractClinicalParameters(rawText) : [];
+      const detectedFindings = rawText ? this.buildFindingsSummary(extractedParameters, rawText) : '';
 
       return {
         rawText,
         extractedParameters,
         detectedFindings,
-        confidenceScore: 0.94,
+        confidenceScore: rawText ? 0.94 : 0.0,
       };
     } catch (error) {
       logger.error('Error during OCR parsing:', error);
       return {
-        rawText: 'Laboratory Test Record',
+        rawText: '',
         extractedParameters: [],
-        detectedFindings: 'Automated OCR extraction completed with baseline parameters.',
-        confidenceScore: 0.75,
+        detectedFindings: '',
+        confidenceScore: 0.0,
       };
     }
   }
@@ -118,8 +115,8 @@ export class OCRService {
 
   private buildFindingsSummary(parameters: ExtractedParameter[], rawText: string): string {
     if (parameters.length === 0) {
-      const firstLines = rawText.split('\n').filter((l) => l.trim().length > 3).slice(0, 4);
-      return firstLines.join(' | ') || 'Clinical parameters extracted via automated OCR analysis.';
+      const firstLines = rawText.split('\n').map(l => l.trim()).filter((l) => l.length > 3).slice(0, 5);
+      return firstLines.join('\n');
     }
 
     const abnormal = parameters.filter((p) => p.status !== 'NORMAL');

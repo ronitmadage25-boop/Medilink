@@ -50,9 +50,19 @@ export const requestExplanation = async (req: AuthRequest, res: Response): Promi
   const aiKey = process.env.AI_API_KEY;
   const isAiConfigured = process.env.AI_PROVIDER === 'openai' && aiKey;
 
-  let explanationText = DEMO_EXPLANATION.explanation;
-  let terminology = DEMO_EXPLANATION.terminology;
-  let questions = DEMO_EXPLANATION.suggestedQuestions;
+  let explanationText = `This ${report.testType} diagnostic evaluation conducted on ${new Date(report.testDate).toLocaleDateString()} provides medical indicators for clinical review.\n\nFindings Summary:\n${report.findings || 'No acute abnormalities recorded in primary metrics.'}\n\nNotes from Laboratory:\n${report.notes || 'Document processed per clinical laboratory protocol.'}\n\nNext Steps:\nDiscuss these results with your attending physician during your scheduled consultation to evaluate your overall health profile.`;
+
+  let terminology = [
+    { term: report.testType, definition: `The specialized clinical diagnostic evaluation ordered to evaluate biological metrics.` },
+    { term: 'Reference Range', definition: 'The expected biological interval that standard healthy reference populations reside within.' },
+    { term: 'Clinical Significance', definition: 'The practical medical importance of an observed laboratory metric in patient health.' },
+  ];
+
+  let questions = [
+    `What do my specific ${report.testType} results indicate about my current health?`,
+    `Are any lifestyle, nutritional, or medication adjustments indicated based on these findings?`,
+    `When is the recommended interval for a follow-up assessment?`,
+  ];
   let isDemo = true;
 
   if (isAiConfigured) {

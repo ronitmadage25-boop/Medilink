@@ -60,6 +60,9 @@ export const ConsultationRoomPage: React.FC = () => {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const candidateQueue = useRef<RTCIceCandidateInit[]>([]);
+  const isRemoteDescriptionSet = useRef<boolean>(false);
+  const animIntervalRef = useRef<any>(null);
 
   // States
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -88,7 +91,7 @@ export const ConsultationRoomPage: React.FC = () => {
     ],
   };
 
-  // 1. Fetch available reports for sharing
+  // 1. Fetch available reports for sharing & chat history
   useEffect(() => {
     const fetchReports = async () => {
       try {
@@ -100,8 +103,28 @@ export const ConsultationRoomPage: React.FC = () => {
         // Silently handle if reports cannot be fetched
       }
     };
+
+    const fetchChatHistory = async () => {
+      try {
+        const res = await api.get(`/consultations/${roomCode}/messages`);
+        if (res.data?.success && Array.isArray(res.data.data.messages)) {
+          setMessages(res.data.data.messages);
+          if (chatScrollRef.current) {
+            setTimeout(() => {
+              if (chatScrollRef.current) {
+                chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+              }
+            }, 100);
+          }
+        }
+      } catch {
+        // Silently handle if new room without history
+      }
+    };
+
     fetchReports();
-  }, []);
+    if (roomCode) fetchChatHistory();
+  }, [roomCode]);
 
   // 2. Setup RTCPeerConnection helper
   const createPeerConnection = useCallback(() => {
@@ -119,23 +142,47 @@ export const ConsultationRoomPage: React.FC = () => {
     };
 
     pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+      if (remoteVideoRef.current) {
+        if (event.streams && event.streams[0]) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        } else {
+          let currentStream = remoteVideoRef.current.srcObject as MediaStream;
+          if (!currentStream) {
+            currentStream = new MediaStream();
+            remoteVideoRef.current.srcObject = currentStream;
+          }
+          currentStream.addTrack(event.track);
+        }
         setPeerConnected(true);
+        remoteVideoRef.current?.play().catch(() => {});
       }
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      if (pc.connectionState === 'connected') {
+        setPeerConnected(true);
+        remoteVideoRef.current?.play().catch(() => {});
+      } else if (
+        pc.connectionState === 'disconnected' ||
+        pc.connectionState === 'failed' ||
+        pc.connectionState === 'closed'
+      ) {
         setPeerConnected(false);
       }
     };
 
     // Add local tracks to peer connection
-    if (localStreamRef.current) {
+    if (localStreamRef.current && localStreamRef.current.getTracks().length > 0) {
       localStreamRef.current.getTracks().forEach((track) => {
         pc.addTrack(track, localStreamRef.current!);
       });
+    } else {
+      try {
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      } catch {
+        // Transceivers optional
+      }
     }
 
     peerConnectionRef.current = pc;
@@ -147,37 +194,114 @@ export const ConsultationRoomPage: React.FC = () => {
     let mounted = true;
 
     const initConsultation = async () => {
+      // Step A: Attempt to acquire camera and microphone with robust fallback
+      let stream: MediaStream | null = null;
       try {
-        // Obtain camera and microphone
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: true,
         });
-
-        if (!mounted) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
+      } catch (primaryMediaErr) {
+        console.warn('Initial video+audio getUserMedia failed (e.g. camera busy in other tab):', primaryMediaErr);
+        try {
+          // Attempt audio-only if physical webcam is locked by another window/tab
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (audioErr) {
+          console.warn('Audio-only getUserMedia also failed:', audioErr);
         }
 
+        // Generate synthetic canvas stream so WebRTC SDP negotiation still has a valid video track
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 640;
+          canvas.height = 480;
+          const ctx = canvas.getContext('2d');
+          
+          const drawFrame = () => {
+            if (!ctx) return;
+            const now = new Date();
+            // Background
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, 640, 480);
+            
+            // Pulsing avatar circle
+            const pulse = Math.sin(Date.now() / 250);
+            const radius = 55 + pulse * 6;
+            ctx.beginPath();
+            ctx.arc(320, 180, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+
+            // Inner circle
+            ctx.beginPath();
+            ctx.arc(320, 180, 45, 0, Math.PI * 2);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+
+            // Text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(user?.name || 'In-Call Participant', 320, 280);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(`Active Simulated Video Feed • ${now.toLocaleTimeString()}`, 320, 315);
+            ctx.fillStyle = '#64748b';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('(Physical webcam in use by other window)', 320, 340);
+          };
+
+          drawFrame();
+          animIntervalRef.current = setInterval(drawFrame, 200);
+
+          if ((canvas as any).captureStream) {
+            const canvasStream = (canvas as any).captureStream(15) as MediaStream;
+            const syntheticVideoTrack = canvasStream.getVideoTracks()[0];
+            if (syntheticVideoTrack) {
+              if (!stream) stream = new MediaStream();
+              stream.addTrack(syntheticVideoTrack);
+            }
+          }
+        } catch {
+          // Canvas stream fallback optional
+        }
+      }
+
+      if (!mounted) {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      if (stream) {
         localStreamRef.current = stream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
         }
+      }
 
-        // Initialize Socket.io connection
+      // Step B: Initialize Socket.io connection (ALWAYS connects, regardless of camera status)
+      try {
         const socket = io(window.location.origin, {
           transports: ['websocket', 'polling'],
         });
         socketRef.current = socket;
 
-        socket.on('connect', () => {
+        const emitJoin = () => {
           setIsConnected(true);
           socket.emit('join-consultation-room', {
             roomCode,
             userName: user?.name || 'Healthcare Participant',
             userRole: user?.role || 'PATIENT',
           });
-        });
+        };
+
+        if (socket.connected) {
+          emitJoin();
+        } else {
+          socket.on('connect', emitJoin);
+        }
 
         socket.on('room-joined', (data: { roomCode: string; existingParticipants: any[] }) => {
           if (data.existingParticipants && data.existingParticipants.length > 0) {
@@ -195,6 +319,20 @@ export const ConsultationRoomPage: React.FC = () => {
         socket.on('webrtc-offer', async (data: { offer: RTCSessionDescriptionInit; from: string }) => {
           const pc = createPeerConnection();
           await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          isRemoteDescriptionSet.current = true;
+
+          // Drain queued ICE candidates
+          while (candidateQueue.current.length > 0) {
+            const cand = candidateQueue.current.shift();
+            if (cand && peerConnectionRef.current) {
+              try {
+                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
+              } catch {
+                // ignore
+              }
+            }
+          }
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
 
@@ -209,17 +347,34 @@ export const ConsultationRoomPage: React.FC = () => {
             await peerConnectionRef.current.setRemoteDescription(
               new RTCSessionDescription(data.answer)
             );
+            isRemoteDescriptionSet.current = true;
+
+            // Drain queued ICE candidates
+            while (candidateQueue.current.length > 0) {
+              const cand = candidateQueue.current.shift();
+              if (cand && peerConnectionRef.current) {
+                try {
+                  await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(cand));
+                } catch {
+                  // ignore
+                }
+              }
+            }
           }
         });
 
         socket.on('webrtc-ice-candidate', async (data: { candidate: RTCIceCandidateInit }) => {
-          if (peerConnectionRef.current && data.candidate) {
-            try {
-              await peerConnectionRef.current.addIceCandidate(
-                new RTCIceCandidate(data.candidate)
-              );
-            } catch {
-              // Candidate error handled
+          if (data.candidate) {
+            if (isRemoteDescriptionSet.current && peerConnectionRef.current) {
+              try {
+                await peerConnectionRef.current.addIceCandidate(
+                  new RTCIceCandidate(data.candidate)
+                );
+              } catch {
+                // Candidate handled
+              }
+            } else {
+              candidateQueue.current.push(data.candidate);
             }
           }
         });
@@ -229,9 +384,16 @@ export const ConsultationRoomPage: React.FC = () => {
         });
 
         socket.on('consultation-chat-message', (msg: ChatMessage) => {
-          setMessages((prev) => [...prev, msg]);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            return [...prev, msg];
+          });
           if (chatScrollRef.current) {
-            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+            setTimeout(() => {
+              if (chatScrollRef.current) {
+                chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+              }
+            }, 50);
           }
         });
 
@@ -251,6 +413,9 @@ export const ConsultationRoomPage: React.FC = () => {
 
     return () => {
       mounted = false;
+      if (animIntervalRef.current) {
+        clearInterval(animIntervalRef.current);
+      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
@@ -384,28 +549,46 @@ export const ConsultationRoomPage: React.FC = () => {
     }
   };
 
-  // 9. Send Chat Message
-  const handleSendMessage = (e: React.FormEvent) => {
+  // 9. Send Chat Message (Persisted & Real-Time)
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socketRef.current) return;
-
-    const messagePayload: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sender: user?.name || 'Healthcare Participant',
-      role: user?.role || 'PATIENT',
-      text: newMessage.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, messagePayload]);
-    socketRef.current.emit('consultation-chat-message', {
-      roomCode,
-      message: messagePayload,
-    });
+    const text = newMessage.trim();
+    if (!text) return;
     setNewMessage('');
 
+    try {
+      const res = await api.post(`/consultations/${roomCode}/messages`, { text });
+      if (res.data?.success && res.data.data?.message) {
+        const savedMsg = res.data.data.message;
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === savedMsg.id)) return prev;
+          return [...prev, savedMsg];
+        });
+      }
+    } catch {
+      // Direct WebSocket fallback if offline
+      if (socketRef.current) {
+        const fallbackMsg: ChatMessage = {
+          id: `msg-${Date.now()}`,
+          sender: user?.name || 'Healthcare Participant',
+          role: user?.role || 'PATIENT',
+          text,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setMessages((prev) => [...prev, fallbackMsg]);
+        socketRef.current.emit('consultation-chat-message', {
+          roomCode,
+          message: fallbackMsg,
+        });
+      }
+    }
+
     if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      setTimeout(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }, 50);
     }
   };
 
@@ -488,7 +671,7 @@ export const ConsultationRoomPage: React.FC = () => {
               autoPlay
               playsInline
               className={`w-full h-full object-cover transition-opacity duration-300 ${
-                peerConnected ? 'opacity-100' : 'opacity-0 hidden'
+                peerConnected ? 'block opacity-100' : 'hidden opacity-0'
               }`}
             />
 

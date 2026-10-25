@@ -101,6 +101,11 @@ export interface DiagnosticReport {
   testDate: string;
   findings?: string;
   notes?: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileKey?: string;
+  mimeType?: string;
+  fileSize?: number;
   file?: {
     fileKey: string;
     fileName: string;

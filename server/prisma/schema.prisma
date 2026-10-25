@@ -270,3 +270,15 @@ model AuditLog {
   outcome      String   @default("SUCCESS")
   createdAt    DateTime @default(now())
 }
+
+model ConsultationMessage {
+  id         String   @id @default(uuid())
+  roomCode   String
+  senderId   String?
+  senderName String
+  senderRole String
+  text       String
+  createdAt  DateTime @default(now())
+
+  @@index([roomCode])
+}
