@@ -25,7 +25,7 @@ export const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register } = useAuth();
+  const { register, login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -34,12 +34,23 @@ export const RegisterPage: React.FC = () => {
     setIsLoading(true);
 
     try {
+      const normalizedEmail = email.toLowerCase().trim();
+
+      // If user enters admin credentials on the register page, authenticate and redirect directly to admin panel
+      if (normalizedEmail === 'admin@medilink.health') {
+        const user = await login(normalizedEmail, password);
+        if (user.role === 'ADMIN') {
+          navigate('/admin/dashboard');
+          return;
+        }
+      }
+
       const payload: Record<string, unknown> = {
         role,
-        email,
+        email: normalizedEmail,
         password,
         mobile,
-        name: role === 'DIAGNOSTIC_CENTRE' ? centreName || name : name,
+        name: role === 'DIAGNOSTIC_CENTRE' ? centreName || name : name || 'User',
       };
 
       if (role === 'DOCTOR') {

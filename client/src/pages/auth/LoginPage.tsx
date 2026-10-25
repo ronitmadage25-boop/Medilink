@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Alert } from '../../components/ui/Alert';
-import { HeartPulse, Lock, Mail, Sparkles, User, Stethoscope, Building2, Shield } from 'lucide-react';
+import { HeartPulse, Lock, Mail } from 'lucide-react';
 import { getErrorMessage } from '../../lib/api';
 import { UserRole } from '../../types';
 
@@ -13,7 +13,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login, quickLogin } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -39,19 +39,6 @@ export const LoginPage: React.FC = () => {
 
     try {
       const user = await login(email, password);
-      redirectAfterLogin(user.role);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleQuickDemo = async (role: UserRole) => {
-    setError(null);
-    setIsLoading(true);
-    try {
-      const user = await quickLogin(role);
       redirectAfterLogin(user.role);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -127,80 +114,6 @@ export const LoginPage: React.FC = () => {
               Sign In
             </Button>
           </form>
-
-          {/* Quick Demo Logins */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
-                <span>Instant Demo Logins (1-Click)</span>
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 mb-3">
-              Click any demo profile to sign in instantly with verified credentials:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('PATIENT')}
-                disabled={isLoading}
-                className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-cyan-500 hover:bg-cyan-50/50 text-left transition-all cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
-                  <User className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Patient</p>
-                  <p className="text-[10px] text-slate-400">Priya Sharma</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('DOCTOR')}
-                disabled={isLoading}
-                className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 text-left transition-all cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                  <Stethoscope className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Doctor</p>
-                  <p className="text-[10px] text-slate-400">Dr. Rajan Mehta</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('DIAGNOSTIC_CENTRE')}
-                disabled={isLoading}
-                className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-all cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Building2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Diag. Lab</p>
-                  <p className="text-[10px] text-slate-400">Sunita Patel</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('ADMIN')}
-                disabled={isLoading}
-                className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-purple-500 hover:bg-purple-50/50 text-left transition-all cursor-pointer"
-              >
-                <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                  <Shield className="w-4 h-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800">Admin</p>
-                  <p className="text-[10px] text-slate-400">System Root</p>
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
